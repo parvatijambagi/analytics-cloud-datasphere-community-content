@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-318t3E3DDKzuqtwzfmXTZSxwW1/Ahw7RsAfD8L2+cDs=",
+      "integrity": "sha256-PBDXlamQGa8smgqg/LfNga6pj8CnjN6oK4qZSsxmPoY=",
       "ignoreIntegrity": false
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling",
       "url": "/styling.js",
-      "integrity": "sha256-4fC+UdS7hdYEBiK14ZXtf6HSoX8Np06b68Xa5z4Pg5Q=",
+      "integrity": "sha256-ySHO6Ou5HGfw6XDg9F3NF49wVgZ3tjyOkXRu2likjVY=",
       "ignoreIntegrity": false
     }
   ],
@@ -178,7 +178,7 @@
     "columnDimension": {
       "type": "string",
       "default": "Auto",
-      "description": "Dimension to pivot onto columns (Auto, Version, Date, or a dimension name)"
+      "description": "Auto (Version and Date), a name, or comma-separated names such as Version,Date"
     },
     "planningEnabled": {
       "type": "boolean",
@@ -330,12 +330,17 @@
       "feeds": [
         {
           "id": "dimensions",
-          "description": "Row dimensions",
+          "description": "Rows",
+          "type": "dimension"
+        },
+        {
+          "id": "columns",
+          "description": "Columns",
           "type": "dimension"
         },
         {
           "id": "measures",
-          "description": "Editable measures or accounts",
+          "description": "Measures",
           "type": "mainStructureMember"
         }
       ]

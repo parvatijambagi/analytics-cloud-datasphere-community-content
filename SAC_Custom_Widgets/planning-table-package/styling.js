@@ -80,9 +80,9 @@
         <option value="Cross-Tab">Cross-Tab</option>
         <option value="Forecast Layout">Forecast Layout</option>
       </select>
-      <p class="hint">Cross-Tab puts Version on columns when it is in the dimension feed. Forecast Layout puts Date/Time on columns. Add row dimensions (ARE, Cost Center, Depthstructure) and measures (Local Currency, Global Currency) in Builder.</p>
-      <label for="columnDimension">Column dimension</label>
-      <input id="columnDimension" type="text" placeholder="Auto (Version or Date)" />
+      <p class="hint">In Builder: put ARE, Cost Center, Depthstructure in <em>Rows</em>. Put Version, Date, or both in <em>Columns</em> so they stack above Measures. Remove Version and add Date in Columns to replace it. You cannot use a custom Builder with data binding, so Rows/Columns/Measures are the SAC data-binding wells.</p>
+      <label for="columnDimension">Column dimensions</label>
+      <input id="columnDimension" type="text" placeholder="Auto, or Version,Date" />
 
       <h3>Planning</h3>
       <div class="checks">

@@ -10,7 +10,10 @@
     for (const key in measuresMap) {
       measures.push({ key, ...measuresMap[key] })
     }
-    return { dimensions, measures }
+    const feeds = (metadata && metadata.feeds) || {}
+    const rowFeedKeys = (feeds.dimensions && feeds.dimensions.values) || (feeds.rows && feeds.rows.values) || []
+    const colFeedKeys = (feeds.columns && feeds.columns.values) || []
+    return { dimensions, measures, rowFeedKeys, colFeedKeys }
   }
 
   const setupMessage = extra => {
@@ -21,10 +24,10 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add at least one dimension to <em>Row dimensions</em> (for example ARE, Cost Center, Depthstructure).</li>
-          <li>Add at least one measure or account (for example Local Currency, Global Currency).</li>
-          <li>To get Version on columns, also add <em>Version</em> to the dimension feed (Cross-Tab). For Forecast Layout, add Date/Time.</li>
-          <li>For a planning model, set a <em>Version</em> filter if Version is not on the axis.</li>
+          <li>Add row dimensions to <em>Rows</em> (ARE, Cost Center, Depthstructure).</li>
+          <li>Add column dimensions to <em>Columns</em> (Version, Date, or both). They stack <em>above Measures</em>. Remove Version and add Date there to replace it.</li>
+          <li>Add measures (Local Currency, Global Currency).</li>
+          <li>For a planning model, set a <em>Version</em> filter if Version is not on an axis.</li>
         </ol>
         ${extra ? `<p>${extra}</p>` : ''}
       </div>
@@ -146,38 +149,69 @@
     return (cell && (cell.label || cell.id)) || ''
   }
 
-  const pickColumnDimension = (dimensions, tableType, columnDimension) => {
-    if (!dimensions || dimensions.length < 2) {
-      return null
+  const matchesName = (dimension, requested) => {
+    const name = dimName(dimension).toLowerCase()
+    const req = requested.toLowerCase()
+    return name === req || (dimension.id || '').toLowerCase() === req || dimension.key.toLowerCase() === req || name.indexOf(req) !== -1
+  }
+
+  const isVersionDim = dimension => /version/.test(dimName(dimension).toLowerCase())
+  const isDateDim = dimension => /date|time|month|period|year|calmonth|fiscal/.test(dimName(dimension).toLowerCase())
+
+  const pickColumnDimensions = (dimensions, metadata, tableType, columnDimension) => {
+    if (!dimensions || !dimensions.length) {
+      return []
+    }
+    const feeds = (metadata && metadata.feeds) || {}
+    const colFeedKeys = (feeds.columns && feeds.columns.values) || []
+    if (colFeedKeys.length) {
+      return colFeedKeys.map(key => dimensions.find(dimension => dimension.key === key)).filter(Boolean)
     }
     const requested = (columnDimension || 'Auto').trim()
     if (requested && requested !== 'Auto') {
-      const match = dimensions.find(dimension => {
-        const name = dimName(dimension)
-        return name === requested || dimension.id === requested || dimension.key === requested
-      })
-      if (match) {
-        return match
-      }
+      return requested.split(',').map(part => part.trim()).filter(Boolean).map(part => {
+        return dimensions.find(dimension => matchesName(dimension, part))
+      }).filter(Boolean)
     }
-    const text = dimension => dimName(dimension).toLowerCase()
     if (tableType === 'Forecast Layout') {
-      return dimensions.find(dimension => /date|time|month|period|year|calmonth|fiscal/.test(text(dimension))) || dimensions[dimensions.length - 1]
+      const dates = dimensions.filter(isDateDim)
+      return dates.length ? dates : []
     }
-    return dimensions.find(dimension => /version/.test(text(dimension))) || null
+    const auto = dimensions.filter(dimension => isVersionDim(dimension) || isDateDim(dimension))
+    return auto
   }
 
-  const uniqueInOrder = (data, dimension) => {
+  const columnTuples = (data, colDims) => {
+    if (!colDims.length) {
+      return [{ key: '', cells: [] }]
+    }
     const seen = new Set()
     const list = []
     data.forEach(row => {
-      const id = cellId(row, dimension)
-      if (!seen.has(id)) {
-        seen.add(id)
-        list.push({ id, label: cellLabel(row, dimension) })
+      const key = colDims.map(dimension => cellId(row, dimension)).join('|')
+      if (!seen.has(key)) {
+        seen.add(key)
+        list.push({
+          key,
+          cells: colDims.map(dimension => ({ id: cellId(row, dimension), label: cellLabel(row, dimension) }))
+        })
       }
     })
     return list
+  }
+
+  const headerGroups = (tuples, dimIndex) => {
+    const groups = []
+    tuples.forEach(tuple => {
+      const prefix = tuple.cells.slice(0, dimIndex + 1).map(cell => cell.id).join('|')
+      const last = groups[groups.length - 1]
+      if (last && last.prefix === prefix) {
+        last.span += 1
+      } else {
+        groups.push({ prefix, span: 1, label: (tuple.cells[dimIndex] && tuple.cells[dimIndex].label) || '' })
+      }
+    })
+    return groups
   }
 
   const parseInputNumber = value => {
@@ -538,9 +572,11 @@
       const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
       const tableType = this.tableType || 'Cross-Tab'
-      const colDim = pickColumnDimension(dimensions, tableType, this.columnDimension)
-      const rowDims = colDim ? dimensions.filter(dimension => dimension.key !== colDim.key) : dimensions
-      const colMembers = colDim ? uniqueInOrder(data, colDim) : [{ id: '', label: '' }]
+      const colDims = pickColumnDimensions(dimensions, metadata, tableType, this.columnDimension)
+      const colDimKeys = new Set(colDims.map(dimension => dimension.key))
+      const rowDims = dimensions.filter(dimension => !colDimKeys.has(dimension.key))
+      const colMembers = columnTuples(data, colDims)
+      const hasColDims = colDims.length > 0
       const measureList = measures
       const rowTuples = []
       const seenRows = new Set()
@@ -554,7 +590,7 @@
       this._cellIndex = new Map()
       data.forEach(row => {
         const rKey = rowKey(row, rowDims)
-        const cId = colDim ? cellId(row, colDim) : ''
+        const cId = colDims.length ? colDims.map(dimension => cellId(row, dimension)).join('|') : ''
         measureList.forEach(measure => {
           this._cellIndex.set(rKey + '||' + cId + '||' + measure.key, row)
         })
@@ -584,31 +620,46 @@
       const headerStyle = cellChrome + ';background:' + headerBg + ';color:' + headerFg
       const rowDimCount = Math.max(rowDims.length, 1)
       const measureCount = measureList.length
+      const colHeaderRows = (hasColDims ? colDims.length : 0) + 1
       let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
-      table += '<tr>'
-      table += `<th class="group" colspan="${rowDimCount}" rowspan="2" style="${headerStyle};text-align:${hAlign}"></th>`
-      if (colDim) {
-        table += `<th class="group" style="${headerStyle}">${this._escape(dimName(colDim))}</th>`
-        colMembers.forEach(member => {
-          table += `<th class="group" colspan="${measureCount}" style="${headerStyle}">${this._escape(member.label || member.id || 'Actual')}</th>`
+      if (hasColDims) {
+        colDims.forEach((dimension, dimIndex) => {
+          table += '<tr>'
+          if (dimIndex === 0) {
+            table += `<th class="group" colspan="${rowDimCount}" rowspan="${colHeaderRows}" style="${headerStyle};text-align:${hAlign}"></th>`
+          }
+          table += `<th class="group" style="${headerStyle}">${this._escape(dimName(dimension))}</th>`
+          headerGroups(colMembers, dimIndex).forEach(group => {
+            table += `<th class="group" colspan="${group.span * measureCount}" style="${headerStyle}">${this._escape(group.label)}</th>`
+          })
+          table += '</tr>'
         })
-      } else {
-        table += `<th class="group" colspan="${measureCount}" style="${headerStyle}">Measures</th>`
-      }
-      table += '</tr><tr>'
-      if (colDim) {
+        table += '<tr>'
         table += `<th class="group" style="${headerStyle}">Measures</th>`
-      }
-      colMembers.forEach(() => {
+        colMembers.forEach(() => {
+          measureList.forEach(measure => {
+            table += `<th class="measure" style="${headerStyle};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+          })
+        })
+        table += '</tr>'
+      } else {
+        table += '<tr>'
+        table += `<th class="group" colspan="${rowDimCount}" rowspan="2" style="${headerStyle};text-align:${hAlign}"></th>`
+        table += `<th class="group" colspan="${measureCount}" style="${headerStyle}">Measures</th>`
+        table += '</tr><tr>'
         measureList.forEach(measure => {
           table += `<th class="measure" style="${headerStyle};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
         })
-      })
-      table += '</tr><tr>'
+        table += '</tr>'
+      }
+      table += '<tr>'
       rowDims.forEach(dimension => {
         table += `<th style="${headerStyle};text-align:${hAlign}">${this._escape(dimName(dimension))}</th>`
       })
-      if (colDim) {
+      if (!rowDims.length) {
+        table += `<th style="${headerStyle}"></th>`
+      }
+      if (hasColDims) {
         table += `<th style="${headerStyle}"></th>`
       }
       colMembers.forEach(() => {
@@ -634,15 +685,15 @@
           const dimRule = firstMatchingRule(rules, 'dimension')
           table += `<td class="dim" title="${this._escape(cellId(tuple.row, dimension))}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${toggle}${this._escape(label)}</td>`
         })
-        if (colDim) {
+        if (hasColDims) {
           table += `<td class="dim" style="${cellChrome}"></td>`
         }
         colMembers.forEach((member, colIndex) => {
           measureList.forEach((measure, measureIndex) => {
-            const source = this._cellIndex.get(tuple.key + '||' + member.id + '||' + measure.key)
+            const source = this._cellIndex.get(tuple.key + '||' + member.key + '||' + measure.key)
             const bound = (source && source[measure.key]) || {}
             const original = bound.raw
-            const pKey = tuple.key + '||' + member.id + '||' + measure.key
+            const pKey = tuple.key + '||' + member.key + '||' + measure.key
             const pending = this._pending.get(pKey)
             const current = pending ? pending.value : original
             const isNull = current === null || current === undefined || current === ''
@@ -676,7 +727,7 @@
       if (this.showTotals !== false) {
         table += '<tfoot><tr>'
         table += `<td colspan="${rowDimCount}" style="${cellChrome};text-align:${hAlign}">Total</td>`
-        if (colDim) {
+        if (hasColDims) {
           table += `<td style="${cellChrome}"></td>`
         }
         colMembers.forEach((member, colIndex) => {

@@ -30,7 +30,7 @@ The ZIP must keep `main.js` and `styling.js` at the archive root. Those names ma
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.2.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.3.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 ## If the widget says data binding failed
 
@@ -94,8 +94,8 @@ Use the widget **Submit** button (or `PlanningTable_1.submitChanges()`), then in
 
 Matches the native SAC table styling and Builder sections as far as a custom widget can:
 
-- **Table Type** — Cross-Tab (Version on columns) or Forecast Layout (Date/Time on columns)
-- **Rows / Columns** — come from the SAC **Builder** data binding. Put ARE, Cost Center, Depthstructure in dimensions; put Version in the same feed to pivot it onto columns; put Local Currency and Global Currency in measures
+- **Table Type** — Cross-Tab or Forecast Layout
+- **Rows / Columns / Measures** — SAC **Builder** now has three wells. Rows: ARE, Cost Center, Depthstructure. Columns: Version and/or Date (stacked above Measures). You can remove Version and add Date in Columns. Measures: Local Currency, Global Currency. Auto still pivots Version and Date onto columns if they sit in a single dimension feed.
 - **Planning** — enabled, fluid data entry, locking/DAC indicators, booked/unbooked display
 - **Table Properties** — comments (right-click), calculation priority, disable interaction, data refresh
 - **Styling Rules, Lines, Font, Number Format** — as before
