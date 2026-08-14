@@ -15,7 +15,9 @@ Furthermore, it is crucial to check and thoroughly read the licenses of the thir
 Please use this repository responsibly and at your own risk.
 
 ## Requirements
-All the exisiting Custom Widget Samples are developed with the new property: Data Binding and works ONLY if your optimized view mode (OVM) is enabled within Analytics Designer or with the Optimized and Unified Story Experience.
+All the existing Custom Widget Samples are developed with the new property: Data Binding and works ONLY if your optimized view mode (OVM) is enabled within Analytics Designer or with the Optimized and Unified Story Experience.
+
+Chart samples cover visualization. For editable planning layouts, see **Planning Table with Styling Panel**. That widget binds dimensions and measures the same way as the charts, then raises `onCellChange` / `onSubmit` so a story script can persist values through a native planning table (`setUserInput` / `submitData`).
 
 ## Download and Installation
 Developers/Users can download the Custom Widgets files (JSON/JavaScript) and host them into their favorite cloud hosting service.

@@ -1,0 +1,184 @@
+{
+  "eula": "",
+  "vendor": "SAP",
+  "license": "",
+  "id": "com.sap.sac.sample.planning.table",
+  "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
+  "version": "1.0.0",
+  "supportsMobile": true,
+  "supportsBookmark": true,
+  "name": "Planning Table",
+  "newInstancePrefix": "PlanningTable",
+  "description": "A sample custom planning table with editable measure cells, change highlighting, and events for story-script write-back",
+  "webcomponents": [
+    {
+      "kind": "main",
+      "tag": "com-sap-sac-sample-planning-table",
+      "url": "/main.js",
+      "integrity": "",
+      "ignoreIntegrity": true
+    },
+    {
+      "kind": "styling",
+      "tag": "com-sap-sac-sample-planning-table-styling",
+      "url": "/styling.js",
+      "integrity": "",
+      "ignoreIntegrity": true
+    }
+  ],
+  "properties": {
+    "width": {
+      "type": "integer",
+      "default": 720
+    },
+    "height": {
+      "type": "integer",
+      "default": 420
+    },
+    "headerBackground": {
+      "type": "string",
+      "default": "#0854A0",
+      "description": "Table header background color"
+    },
+    "headerTextColor": {
+      "type": "string",
+      "default": "#FFFFFF",
+      "description": "Table header text color"
+    },
+    "changedCellColor": {
+      "type": "string",
+      "default": "#FFF3B8",
+      "description": "Background color for edited planning cells"
+    },
+    "fontSize": {
+      "type": "integer",
+      "default": 13,
+      "description": "Table font size in pixels"
+    },
+    "decimalPlaces": {
+      "type": "integer",
+      "default": 2,
+      "description": "Decimal places shown in editable cells"
+    },
+    "showTotals": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show a totals row for measures"
+    },
+    "readOnly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Disable cell editing"
+    },
+    "showToolbar": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show Submit and Revert actions"
+    }
+  },
+  "methods": {
+    "getDataSource": {
+      "description": "Return the data source of the planning table data binding",
+      "parameters": [],
+      "body": "return this.dataBindings.getDataBinding('dataBinding').getDataSource();",
+      "returnType": "DataSource"
+    },
+    "getLastChange": {
+      "description": "Get the last edited cell, including selection keys for setUserInput",
+      "returnType": "PlanningChange"
+    },
+    "getPendingChanges": {
+      "description": "Get all unpublished cell edits as a JSON string",
+      "returnType": "string"
+    },
+    "getPendingChangeCount": {
+      "description": "Get the number of unpublished cell edits",
+      "returnType": "integer"
+    },
+    "submitChanges": {
+      "description": "Raise onSubmit so story script can call setUserInput and submitData"
+    },
+    "revertChanges": {
+      "description": "Discard unpublished cell edits and raise onRevert"
+    },
+    "setReadOnly": {
+      "description": "Enable or disable cell editing",
+      "parameters": [
+        {
+          "name": "value",
+          "type": "boolean",
+          "description": "true to lock the table"
+        }
+      ]
+    }
+  },
+  "events": {
+    "onCellChange": {
+      "description": "Dispatch when a planner edits a measure cell"
+    },
+    "onSubmit": {
+      "description": "Dispatch when Submit is used; write back from story script"
+    },
+    "onRevert": {
+      "description": "Dispatch when unpublished edits are discarded"
+    }
+  },
+  "types": {
+    "PlanningChange": {
+      "description": "One planning cell edit",
+      "properties": [
+        {
+          "name": "measureId",
+          "type": "string",
+          "description": "Measure or account ID for the selection"
+        },
+        {
+          "name": "measureDescription",
+          "type": "string",
+          "description": "Measure or account description"
+        },
+        {
+          "name": "oldValue",
+          "type": "string",
+          "description": "Original bound value"
+        },
+        {
+          "name": "newValue",
+          "type": "string",
+          "description": "Edited value to pass to setUserInput"
+        },
+        {
+          "name": "selectionJson",
+          "type": "string",
+          "description": "JSON selection object for Table.getPlanning().setUserInput"
+        },
+        {
+          "name": "dimensionMemberIds",
+          "type": "string",
+          "description": "Semicolon-separated dimensionId=memberId pairs"
+        },
+        {
+          "name": "dimensionLabels",
+          "type": "string",
+          "description": "Readable dimension member labels"
+        }
+      ]
+    }
+  },
+  "dataBindings": {
+    "dataBinding": {
+      "feeds": [
+        {
+          "id": "dimensions",
+          "description": "Row dimensions",
+          "type": "dimension"
+        },
+        {
+          "id": "measures",
+          "description": "Editable measures or accounts",
+          "type": "mainStructureMember"
+        }
+      ]
+    }
+  }
+}

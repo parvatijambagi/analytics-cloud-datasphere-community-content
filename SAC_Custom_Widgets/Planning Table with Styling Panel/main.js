@@ -1,0 +1,446 @@
+(function () {
+  const parseMetadata = metadata => {
+    const { dimensions: dimensionsMap, mainStructureMembers: measuresMap } = metadata
+    const dimensions = []
+    for (const key in dimensionsMap) {
+      dimensions.push({ key, ...dimensionsMap[key] })
+    }
+    const measures = []
+    for (const key in measuresMap) {
+      measures.push({ key, ...measuresMap[key] })
+    }
+    return { dimensions, measures }
+  }
+
+  const rowKey = (row, dimensions) => {
+    return dimensions.map(dimension => {
+      const cell = row[dimension.key]
+      return cell && cell.id ? cell.id : ''
+    }).join('|')
+  }
+
+  const changeKey = (row, dimensions, measureKey) => {
+    return rowKey(row, dimensions) + '||' + measureKey
+  }
+
+  const formatNumber = (value, decimalPlaces) => {
+    if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) {
+      return ''
+    }
+    return Number(value).toLocaleString(undefined, {
+      minimumFractionDigits: decimalPlaces,
+      maximumFractionDigits: decimalPlaces
+    })
+  }
+
+  const parseInputNumber = value => {
+    if (value === null || value === undefined) {
+      return null
+    }
+    const normalized = String(value).replace(/,/g, '').trim()
+    if (!normalized) {
+      return null
+    }
+    const parsed = Number(normalized)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+
+  const buildSelection = (row, dimensions, measure) => {
+    const selection = {}
+    dimensions.forEach(dimension => {
+      const cell = row[dimension.key]
+      if (cell && cell.id && dimension.id) {
+        selection[dimension.id] = cell.id
+      }
+    })
+    if (measure && measure.id) {
+      selection[measure.id] = measure.id
+    }
+    return selection
+  }
+
+  const toPlanningChange = (row, dimensions, measure, oldValue, newValue) => {
+    const selection = buildSelection(row, dimensions, measure)
+    const dimensionMemberIds = dimensions.map(dimension => {
+      const cell = row[dimension.key]
+      return (dimension.id || dimension.key) + '=' + ((cell && cell.id) || '')
+    }).join(';')
+    const dimensionLabels = dimensions.map(dimension => {
+      const cell = row[dimension.key]
+      return (dimension.description || dimension.id || dimension.key) + '=' + ((cell && cell.label) || '')
+    }).join(';')
+    return {
+      measureId: measure.id || measure.key,
+      measureDescription: measure.label || measure.description || measure.id || measure.key,
+      oldValue: oldValue === null || oldValue === undefined ? '' : String(oldValue),
+      newValue: newValue === null || newValue === undefined ? '' : String(newValue),
+      selectionJson: JSON.stringify(selection),
+      dimensionMemberIds,
+      dimensionLabels
+    }
+  }
+
+  const template = document.createElement('template')
+  template.innerHTML = `
+    <style>
+      :host {
+        display: block;
+        width: 100%;
+        height: 100%;
+        font-family: "72", "72full", Arial, Helvetica, sans-serif;
+        color: #1d2d3e;
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        background: #fff;
+        border: 1px solid #d9d9d9;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-bottom: 1px solid #e5e5e5;
+        background: #f5f6f7;
+        flex: 0 0 auto;
+      }
+      .toolbar .status {
+        margin-left: auto;
+        font-size: 12px;
+        color: #556b82;
+      }
+      button {
+        font: inherit;
+        font-size: 12px;
+        padding: 4px 10px;
+        border: 1px solid #0854a0;
+        background: #0854a0;
+        color: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #fff;
+        color: #0854a0;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .table-wrap {
+        overflow: auto;
+        flex: 1 1 auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 100%;
+      }
+      th, td {
+        border: 1px solid #d9d9d9;
+        padding: 6px 8px;
+        white-space: nowrap;
+        text-align: left;
+      }
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        font-weight: 600;
+      }
+      td.measure, th.measure {
+        text-align: right;
+      }
+      td.dim {
+        background: #f8f9fa;
+      }
+      tfoot td {
+        font-weight: 600;
+        background: #f5f6f7;
+      }
+      input.cell-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid transparent;
+        background: transparent;
+        text-align: right;
+        font: inherit;
+        color: inherit;
+        padding: 2px 0;
+      }
+      input.cell-input:focus {
+        outline: 2px solid #0854a0;
+        background: #fff;
+      }
+      .changed input.cell-input {
+        font-weight: 600;
+      }
+      .placeholder, .error {
+        padding: 16px;
+        color: #556b82;
+        font-size: 13px;
+      }
+      .error {
+        color: #aa0808;
+      }
+    </style>
+    <div id="root">
+      <div id="toolbar" class="toolbar"></div>
+      <div id="table-wrap" class="table-wrap"></div>
+    </div>
+  `
+
+  class PlanningTable extends HTMLElement {
+    constructor () {
+      super()
+      this._shadowRoot = this.attachShadow({ mode: 'open' })
+      this._shadowRoot.appendChild(template.content.cloneNode(true))
+      this._root = this._shadowRoot.getElementById('root')
+      this._toolbar = this._shadowRoot.getElementById('toolbar')
+      this._tableWrap = this._shadowRoot.getElementById('table-wrap')
+      this._pending = new Map()
+      this._lastChange = {
+        measureId: '',
+        measureDescription: '',
+        oldValue: '',
+        newValue: '',
+        selectionJson: '{}',
+        dimensionMemberIds: '',
+        dimensionLabels: ''
+      }
+      this._editing = false
+      this._props = {}
+    }
+
+    onCustomWidgetResize () {
+      // Layout is CSS flex; no extra work required.
+    }
+
+    onCustomWidgetAfterUpdate (changedProps) {
+      Object.assign(this._props, changedProps || {})
+      if (!this._editing) {
+        this.render()
+      }
+    }
+
+    getLastChange () {
+      return this._lastChange
+    }
+
+    getPendingChanges () {
+      return JSON.stringify(Array.from(this._pending.values()).map(entry => entry.change))
+    }
+
+    getPendingChangeCount () {
+      return this._pending.size
+    }
+
+    submitChanges () {
+      this.dispatchEvent(new Event('onSubmit'))
+    }
+
+    revertChanges () {
+      this._pending.clear()
+      this._editing = false
+      this.render()
+      this.dispatchEvent(new Event('onRevert'))
+    }
+
+    setReadOnly (value) {
+      this.readOnly = !!value
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { readOnly: this.readOnly } }
+      }))
+    }
+
+    render () {
+      const dataBinding = this.dataBinding
+      this._root.style.fontSize = (this.fontSize || 13) + 'px'
+      this._toolbar.style.display = this.showToolbar === false ? 'none' : 'flex'
+
+      if (!dataBinding || dataBinding.state === 'loading') {
+        this._tableWrap.innerHTML = '<div class="placeholder">Bind a planning model, then add row dimensions and measures or accounts.</div>'
+        this._renderToolbar()
+        return
+      }
+      if (dataBinding.state === 'error') {
+        this._tableWrap.innerHTML = '<div class="error">The data binding could not be loaded. Check the model, filters, and feeds.</div>'
+        this._renderToolbar()
+        return
+      }
+      if (dataBinding.state !== 'success') {
+        this._tableWrap.innerHTML = '<div class="placeholder">Waiting for data binding…</div>'
+        this._renderToolbar()
+        return
+      }
+
+      const { data, metadata } = dataBinding
+      if (!metadata) {
+        this._tableWrap.innerHTML = '<div class="placeholder">No metadata is available for this binding.</div>'
+        this._renderToolbar()
+        return
+      }
+
+      const { dimensions, measures } = parseMetadata(metadata)
+      this._dimensions = dimensions
+      this._measures = measures
+
+      if (!data || !data.length || !dimensions.length || !measures.length) {
+        this._tableWrap.innerHTML = '<div class="placeholder">Add at least one dimension and one measure or account in the Builder panel.</div>'
+        this._renderToolbar()
+        return
+      }
+
+      const headerBg = this.headerBackground || '#0854A0'
+      const headerFg = this.headerTextColor || '#FFFFFF'
+      const changedBg = this.changedCellColor || '#FFF3B8'
+      const decimalPlaces = Number.isInteger(this.decimalPlaces) ? this.decimalPlaces : 2
+      const editable = !this.readOnly
+
+      const totals = measures.map(() => 0)
+      let table = '<table><thead><tr>'
+      dimensions.forEach(dimension => {
+        table += `<th>${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
+      })
+      measures.forEach(measure => {
+        table += `<th class="measure">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+      })
+      table += '</tr></thead><tbody>'
+
+      data.forEach((row, rowIndex) => {
+        table += '<tr>'
+        dimensions.forEach(dimension => {
+          const cell = row[dimension.key] || {}
+          table += `<td class="dim" title="${this._escape(cell.id || '')}">${this._escape(cell.label || '')}</td>`
+        })
+        measures.forEach((measure, measureIndex) => {
+          const bound = row[measure.key] || {}
+          const original = bound.raw
+          const key = changeKey(row, dimensions, measure.key)
+          const pending = this._pending.get(key)
+          const current = pending ? pending.value : original
+          if (typeof current === 'number' && !Number.isNaN(current)) {
+            totals[measureIndex] += current
+          }
+          const isChanged = !!pending
+          const display = formatNumber(current, decimalPlaces)
+          const unit = bound.unit ? ` title="${this._escape(bound.unit)}"` : ''
+          if (editable) {
+            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}"${unit} style="${isChanged ? 'background:' + changedBg : ''}">`
+            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" />`
+            table += '</td>'
+          } else {
+            table += `<td class="measure"${unit}>${this._escape(bound.formatted || display)}</td>`
+          }
+        })
+        table += '</tr>'
+      })
+      table += '</tbody>'
+
+      if (this.showTotals !== false) {
+        table += '<tfoot><tr>'
+        table += `<td colspan="${dimensions.length}">Total</td>`
+        totals.forEach(total => {
+          table += `<td class="measure">${this._escape(formatNumber(total, decimalPlaces))}</td>`
+        })
+        table += '</tr></tfoot>'
+      }
+      table += '</table>'
+
+      this._tableWrap.innerHTML = table
+      const headerCells = this._tableWrap.querySelectorAll('th')
+      headerCells.forEach(cell => {
+        cell.style.background = headerBg
+        cell.style.color = headerFg
+      })
+
+      this._tableWrap.querySelectorAll('input.cell-input').forEach(input => {
+        input.addEventListener('focus', () => {
+          this._editing = true
+          input.select()
+        })
+        input.addEventListener('blur', () => {
+          this._editing = false
+          this._commitInput(input, data, dimensions, measures, decimalPlaces)
+        })
+        input.addEventListener('keydown', event => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            input.blur()
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            this._editing = false
+            this.render()
+          }
+        })
+      })
+
+      this._renderToolbar()
+    }
+
+    _commitInput (input, data, dimensions, measures, decimalPlaces) {
+      const rowIndex = Number(input.getAttribute('data-row'))
+      const measureKey = input.getAttribute('data-measure')
+      const row = data[rowIndex]
+      const measure = measures.find(item => item.key === measureKey)
+      if (!row || !measure) {
+        return
+      }
+      const bound = row[measure.key] || {}
+      const original = bound.raw
+      const parsed = parseInputNumber(input.value)
+      const key = changeKey(row, dimensions, measure.key)
+
+      if (parsed === null) {
+        this._pending.delete(key)
+        this.render()
+        return
+      }
+
+      const originalNumber = typeof original === 'number' ? original : parseInputNumber(original)
+      if (originalNumber !== null && Math.abs(parsed - originalNumber) < Math.pow(10, -Math.max(decimalPlaces, 6))) {
+        this._pending.delete(key)
+        this.render()
+        return
+      }
+
+      const change = toPlanningChange(row, dimensions, measure, original, parsed)
+      this._pending.set(key, { value: parsed, change })
+      this._lastChange = change
+      this.render()
+      this.dispatchEvent(new Event('onCellChange'))
+    }
+
+    _renderToolbar () {
+      const count = this._pending.size
+      const locked = !!this.readOnly
+      this._toolbar.innerHTML = `
+        <button id="btn-submit" ${count && !locked ? '' : 'disabled'}>Submit</button>
+        <button id="btn-revert" class="secondary" ${count ? '' : 'disabled'}>Revert</button>
+        <span class="status">${locked ? 'Read only' : (count ? count + ' unpublished change' + (count === 1 ? '' : 's') : 'No unpublished changes')}</span>
+      `
+      const submit = this._shadowRoot.getElementById('btn-submit')
+      const revert = this._shadowRoot.getElementById('btn-revert')
+      if (submit) {
+        submit.addEventListener('click', () => this.submitChanges())
+      }
+      if (revert) {
+        revert.addEventListener('click', () => this.revertChanges())
+      }
+    }
+
+    _escape (value) {
+      return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+    }
+  }
+
+  customElements.define('com-sap-sac-sample-planning-table', PlanningTable)
+})()
