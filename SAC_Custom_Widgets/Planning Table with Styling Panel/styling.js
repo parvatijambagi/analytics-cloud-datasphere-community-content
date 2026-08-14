@@ -270,9 +270,9 @@
 
       <h3>Table</h3>
       <label for="headerBackground">Header background</label>
-      <input id="headerBackground" type="text" placeholder="#0854A0" />
+      <input id="headerBackground" type="text" placeholder="#F5F6F7" />
       <label for="headerTextColor">Header text color</label>
-      <input id="headerTextColor" type="text" placeholder="#FFFFFF" />
+      <input id="headerTextColor" type="text" placeholder="#32363A" />
       <label for="changedCellColor">Changed cell color</label>
       <input id="changedCellColor" type="text" placeholder="#FFF3B8" />
       <div class="checks">

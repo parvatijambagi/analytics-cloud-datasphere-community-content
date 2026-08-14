@@ -177,8 +177,7 @@
       const dates = dimensions.filter(isDateDim)
       return dates.length ? dates : []
     }
-    const auto = dimensions.filter(dimension => isVersionDim(dimension) || isDateDim(dimension))
-    return auto
+    return []
   }
 
   const columnTuples = (data, colDims) => {
@@ -337,8 +336,18 @@
       td.measure, th.measure {
         text-align: right;
       }
-      td.dim {
-        background: #f8f9fa;
+      td.dim.child {
+        padding-left: 22px;
+      }
+      .widget-title {
+        font-size: 13px;
+        font-weight: 600;
+        padding: 8px 10px 0;
+      }
+      .widget-title .unit {
+        font-weight: 400;
+        color: #556b82;
+        margin-left: 8px;
       }
       tfoot td {
         font-weight: 600;
@@ -392,6 +401,7 @@
       }
     </style>
     <div id="root">
+      <div id="title" class="widget-title"></div>
       <div id="toolbar" class="toolbar"></div>
       <div id="table-wrap" class="table-wrap"></div>
     </div>
@@ -404,6 +414,7 @@
       this._shadowRoot.appendChild(template.content.cloneNode(true))
       this._root = this._shadowRoot.getElementById('root')
       this._toolbar = this._shadowRoot.getElementById('toolbar')
+      this._title = this._shadowRoot.getElementById('title')
       this._tableWrap = this._shadowRoot.getElementById('table-wrap')
       this._pending = new Map()
       this._lastChange = {
@@ -541,8 +552,8 @@
       this._dimensions = dimensions
       this._measures = measures
 
-      const headerBg = this.headerBackground || '#0854A0'
-      const headerFg = this.headerTextColor || '#FFFFFF'
+      const headerBg = this.headerBackground || '#F5F6F7'
+      const headerFg = this.headerTextColor || '#32363A'
       const changedBg = this.changedCellColor || '#FFF3B8'
       const formatOpts = {
         scale: this.numberScale || 'Default',
@@ -604,6 +615,14 @@
         return rowTuples.some(other => other.key !== tuple.key && prefixKey(other, dimIndex) === prefix)
       }
       const isHidden = tuple => {
+        if (rowDims.length === 1) {
+          const id = cellId(tuple.row, rowDims[0])
+          for (const collapsedId of this._collapsed) {
+            if (collapsedId && id !== collapsedId && id.indexOf(collapsedId) !== -1) {
+              return true
+            }
+          }
+        }
         for (let dimIndex = 0; dimIndex < rowDims.length - 1; dimIndex++) {
           if (!this._collapsed.has(prefixKey(tuple, dimIndex))) {
             continue
@@ -620,13 +639,17 @@
       const headerStyle = cellChrome + ';background:' + headerBg + ';color:' + headerFg
       const rowDimCount = Math.max(rowDims.length, 1)
       const measureCount = measureList.length
-      const colHeaderRows = (hasColDims ? colDims.length : 0) + 1
+      const colHeaderRows = hasColDims ? colDims.length + 1 : 1
+      const unit = (measureList[0] && data[0] && data[0][measureList[0].key] && data[0][measureList[0].key].unit) || ''
+      if (this._title) {
+        this._title.innerHTML = unit ? `Planning table <span class="unit">in ${this._escape(unit)}</span>` : 'Planning table'
+      }
       let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
       if (hasColDims) {
         colDims.forEach((dimension, dimIndex) => {
           table += '<tr>'
           if (dimIndex === 0) {
-            table += `<th class="group" colspan="${rowDimCount}" rowspan="${colHeaderRows}" style="${headerStyle};text-align:${hAlign}"></th>`
+            table += `<th class="group" colspan="${rowDimCount}" rowspan="${colHeaderRows}" style="${headerStyle};text-align:${hAlign}">Measures</th>`
           }
           table += `<th class="group" style="${headerStyle}">${this._escape(dimName(dimension))}</th>`
           headerGroups(colMembers, dimIndex).forEach(group => {
@@ -635,7 +658,7 @@
           table += '</tr>'
         })
         table += '<tr>'
-        table += `<th class="group" style="${headerStyle}">Measures</th>`
+        table += `<th class="group" style="${headerStyle}"></th>`
         colMembers.forEach(() => {
           measureList.forEach(measure => {
             table += `<th class="measure" style="${headerStyle};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
@@ -644,30 +667,19 @@
         table += '</tr>'
       } else {
         table += '<tr>'
-        table += `<th class="group" colspan="${rowDimCount}" rowspan="2" style="${headerStyle};text-align:${hAlign}"></th>`
-        table += `<th class="group" colspan="${measureCount}" style="${headerStyle}">Measures</th>`
-        table += '</tr><tr>'
+        if (rowDims.length <= 1) {
+          table += `<th class="group" style="${headerStyle};text-align:${hAlign}">Measures</th>`
+        } else {
+          rowDims.forEach(dimension => {
+            table += `<th style="${headerStyle};text-align:${hAlign}">${this._escape(dimName(dimension))}</th>`
+          })
+        }
         measureList.forEach(measure => {
           table += `<th class="measure" style="${headerStyle};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
         })
         table += '</tr>'
       }
-      table += '<tr>'
-      rowDims.forEach(dimension => {
-        table += `<th style="${headerStyle};text-align:${hAlign}">${this._escape(dimName(dimension))}</th>`
-      })
-      if (!rowDims.length) {
-        table += `<th style="${headerStyle}"></th>`
-      }
-      if (hasColDims) {
-        table += `<th style="${headerStyle}"></th>`
-      }
-      colMembers.forEach(() => {
-        measureList.forEach(() => {
-          table += `<th style="${headerStyle}"></th>`
-        })
-      })
-      table += '</tr></thead><tbody>'
+      table += '</thead><tbody>'
 
       const visibleTuples = rowTuples.filter(tuple => !isHidden(tuple))
       const colTotals = colMembers.map(() => measureList.map(() => 0))
@@ -676,15 +688,30 @@
         table += '<tr>'
         rowDims.forEach((dimension, dimIndex) => {
           const label = cellLabel(tuple.row, dimension)
-          const children = dimIndex < rowDims.length - 1 && hasChildren(tuple, dimIndex)
+          const cell = tuple.row[dimension.key] || {}
+          const id = cellId(tuple.row, dimension)
+          const children = dimIndex < rowDims.length - 1
+            ? hasChildren(tuple, dimIndex)
+            : rowDims.length === 1 && rowTuples.some(other => {
+              const otherCell = other.row[dimension.key] || {}
+              const otherId = cellId(other.row, dimension)
+              return other.key !== tuple.key && ((otherCell.parentId && otherCell.parentId === id) || (id && otherId !== id && otherId.indexOf(id) !== -1))
+            })
           const prefix = prefixKey(tuple, dimIndex)
           const collapsed = this._collapsed.has(prefix)
           const toggle = children
             ? `<span class="expand" data-prefix="${this._escape(prefix)}">${collapsed ? '>' : 'v'}</span>`
             : ''
+          const nested = rowDims.length === 1 && (cell.parentId || rowTuples.some(other => {
+            const otherId = cellId(other.row, dimension)
+            return otherId && otherId !== id && id.indexOf(otherId) !== -1
+          }))
           const dimRule = firstMatchingRule(rules, 'dimension')
-          table += `<td class="dim" title="${this._escape(cellId(tuple.row, dimension))}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${toggle}${this._escape(label)}</td>`
+          table += `<td class="dim${nested ? ' child' : ''}" title="${this._escape(id)}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${toggle}${this._escape(label)}</td>`
         })
+        if (!rowDims.length) {
+          table += `<td class="dim" style="${cellChrome}"></td>`
+        }
         if (hasColDims) {
           table += `<td class="dim" style="${cellChrome}"></td>`
         }
