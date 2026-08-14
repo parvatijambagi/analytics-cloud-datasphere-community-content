@@ -1,10 +1,12 @@
 # Planning Table — download package
 
-Download these two files and upload them in SAP Analytics Cloud **Custom Widgets**:
+GitHub often **displays** `.json` in the browser instead of downloading it. Use the combined ZIP:
 
-1. [PlanningTable.json](PlanningTable.json) — widget definition  
-2. [PlanningTable.zip](PlanningTable.zip) — resource file (`main.js` + `styling.js`)
+**[PlanningTable-download.zip](../../PlanningTable-download.zip)** (repo root)
 
-`main.js` and `styling.js` are included here only for inspection. SAC needs the ZIP, not the loose JS files.
+Unzip it. You get:
 
-Source and write-back notes: `../Planning Table with Styling Panel/README.md`
+1. `PlanningTable.json` — upload this first in SAC Custom Widgets  
+2. `PlanningTable-resources.zip` — upload this when SAC asks for the resource file  
+
+If a `.json` link opens as text, use **Save As** or download the combined ZIP above.
