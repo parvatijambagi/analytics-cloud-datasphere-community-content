@@ -21,9 +21,10 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add at least one dimension to <em>Row dimensions</em>.</li>
-          <li>Add at least one measure or account to <em>Editable measures or accounts</em>.</li>
-          <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
+          <li>Add at least one dimension to <em>Row dimensions</em> (for example ARE, Cost Center, Depthstructure).</li>
+          <li>Add at least one measure or account (for example Local Currency, Global Currency).</li>
+          <li>To get Version on columns, also add <em>Version</em> to the dimension feed (Cross-Tab). For Forecast Layout, add Date/Time.</li>
+          <li>For a planning model, set a <em>Version</em> filter if Version is not on the axis.</li>
         </ol>
         ${extra ? `<p>${extra}</p>` : ''}
       </div>
@@ -131,6 +132,52 @@
       parts.push(extra)
     }
     return parts.join(';')
+  }
+
+  const dimName = dimension => (dimension.description || dimension.label || dimension.id || dimension.key || '')
+
+  const cellId = (row, dimension) => {
+    const cell = row[dimension.key]
+    return (cell && (cell.id || cell.label)) || ''
+  }
+
+  const cellLabel = (row, dimension) => {
+    const cell = row[dimension.key]
+    return (cell && (cell.label || cell.id)) || ''
+  }
+
+  const pickColumnDimension = (dimensions, tableType, columnDimension) => {
+    if (!dimensions || dimensions.length < 2) {
+      return null
+    }
+    const requested = (columnDimension || 'Auto').trim()
+    if (requested && requested !== 'Auto') {
+      const match = dimensions.find(dimension => {
+        const name = dimName(dimension)
+        return name === requested || dimension.id === requested || dimension.key === requested
+      })
+      if (match) {
+        return match
+      }
+    }
+    const text = dimension => dimName(dimension).toLowerCase()
+    if (tableType === 'Forecast Layout') {
+      return dimensions.find(dimension => /date|time|month|period|year|calmonth|fiscal/.test(text(dimension))) || dimensions[dimensions.length - 1]
+    }
+    return dimensions.find(dimension => /version/.test(text(dimension))) || null
+  }
+
+  const uniqueInOrder = (data, dimension) => {
+    const seen = new Set()
+    const list = []
+    data.forEach(row => {
+      const id = cellId(row, dimension)
+      if (!seen.has(id)) {
+        seen.add(id)
+        list.push({ id, label: cellLabel(row, dimension) })
+      }
+    })
+    return list
   }
 
   const parseInputNumber = value => {
@@ -280,6 +327,19 @@
       .changed input.cell-input {
         font-weight: 600;
       }
+      td.null-cell {
+        background-image: linear-gradient(to top right, transparent calc(50% - 1px), #c6c6c6 50%, transparent calc(50% + 1px));
+      }
+      .expand {
+        display: inline-block;
+        width: 14px;
+        cursor: pointer;
+        color: #0854a0;
+        font-weight: 700;
+      }
+      th.group {
+        text-align: center;
+      }
       .placeholder, .error {
         padding: 16px;
         color: #556b82;
@@ -323,6 +383,9 @@
       }
       this._editing = false
       this._props = {}
+      this._collapsed = new Set()
+      this._comments = new Map()
+      this._cellIndex = new Map()
     }
 
     onCustomWidgetResize () {
@@ -333,6 +396,11 @@
       Object.assign(this._props, changedProps || {})
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
+      }
+      const pause = this.dataRefresh === 'Always Pause'
+      const onlyBinding = changedProps && Object.keys(changedProps).every(key => key === 'dataBinding')
+      if (pause && onlyBinding) {
+        return
       }
       if (!this._editing) {
         this.render()
@@ -450,7 +518,8 @@
       }
       const numericDecimals = formatOpts.decimalPlaces === 'Default' ? 2 : Number(formatOpts.decimalPlaces)
       const decimalPlaces = Number.isFinite(numericDecimals) ? numericDecimals : 2
-      const editable = !this.readOnly
+      const planningOn = this.planningEnabled !== false
+      const editable = planningOn && !this.readOnly && !this.disableInteraction
       const rules = parseRules(this.stylingRulesJson)
       const lineColor = this.lineColor || '#d9d9d9'
       const lineWidth = this.lineType === 'None' ? 0 : Number(this.lineWidth || 1)
@@ -468,45 +537,137 @@
       const vAlign = this.vAlign || 'middle'
       const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
-      const totals = measures.map(() => 0)
-      let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead><tr>`
-      dimensions.forEach(dimension => {
-        table += `<th style="${cellChrome};text-align:${hAlign}">${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
+      const tableType = this.tableType || 'Cross-Tab'
+      const colDim = pickColumnDimension(dimensions, tableType, this.columnDimension)
+      const rowDims = colDim ? dimensions.filter(dimension => dimension.key !== colDim.key) : dimensions
+      const colMembers = colDim ? uniqueInOrder(data, colDim) : [{ id: '', label: '' }]
+      const measureList = measures
+      const rowTuples = []
+      const seenRows = new Set()
+      data.forEach(row => {
+        const key = rowKey(row, rowDims)
+        if (!seenRows.has(key)) {
+          seenRows.add(key)
+          rowTuples.push({ key, row })
+        }
       })
-      measures.forEach(measure => {
-        table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+      this._cellIndex = new Map()
+      data.forEach(row => {
+        const rKey = rowKey(row, rowDims)
+        const cId = colDim ? cellId(row, colDim) : ''
+        measureList.forEach(measure => {
+          this._cellIndex.set(rKey + '||' + cId + '||' + measure.key, row)
+        })
+      })
+
+      const prefixKey = (tuple, dimIndex) => {
+        return rowDims.slice(0, dimIndex + 1).map(dimension => cellId(tuple.row, dimension)).join('|')
+      }
+      const hasChildren = (tuple, dimIndex) => {
+        const prefix = prefixKey(tuple, dimIndex)
+        return rowTuples.some(other => other.key !== tuple.key && prefixKey(other, dimIndex) === prefix)
+      }
+      const isHidden = tuple => {
+        for (let dimIndex = 0; dimIndex < rowDims.length - 1; dimIndex++) {
+          if (!this._collapsed.has(prefixKey(tuple, dimIndex))) {
+            continue
+          }
+          const prefix = prefixKey(tuple, dimIndex)
+          const first = rowTuples.find(item => prefixKey(item, dimIndex) === prefix)
+          if (first && first.key !== tuple.key) {
+            return true
+          }
+        }
+        return false
+      }
+
+      const headerStyle = cellChrome + ';background:' + headerBg + ';color:' + headerFg
+      const rowDimCount = Math.max(rowDims.length, 1)
+      const measureCount = measureList.length
+      let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
+      table += '<tr>'
+      table += `<th class="group" colspan="${rowDimCount}" rowspan="2" style="${headerStyle};text-align:${hAlign}"></th>`
+      if (colDim) {
+        table += `<th class="group" style="${headerStyle}">${this._escape(dimName(colDim))}</th>`
+        colMembers.forEach(member => {
+          table += `<th class="group" colspan="${measureCount}" style="${headerStyle}">${this._escape(member.label || member.id || 'Actual')}</th>`
+        })
+      } else {
+        table += `<th class="group" colspan="${measureCount}" style="${headerStyle}">Measures</th>`
+      }
+      table += '</tr><tr>'
+      if (colDim) {
+        table += `<th class="group" style="${headerStyle}">Measures</th>`
+      }
+      colMembers.forEach(() => {
+        measureList.forEach(measure => {
+          table += `<th class="measure" style="${headerStyle};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+        })
+      })
+      table += '</tr><tr>'
+      rowDims.forEach(dimension => {
+        table += `<th style="${headerStyle};text-align:${hAlign}">${this._escape(dimName(dimension))}</th>`
+      })
+      if (colDim) {
+        table += `<th style="${headerStyle}"></th>`
+      }
+      colMembers.forEach(() => {
+        measureList.forEach(() => {
+          table += `<th style="${headerStyle}"></th>`
+        })
       })
       table += '</tr></thead><tbody>'
 
-      data.forEach((row, rowIndex) => {
+      const visibleTuples = rowTuples.filter(tuple => !isHidden(tuple))
+      const colTotals = colMembers.map(() => measureList.map(() => 0))
+
+      visibleTuples.forEach(tuple => {
         table += '<tr>'
-        dimensions.forEach(dimension => {
-          const cell = row[dimension.key] || {}
+        rowDims.forEach((dimension, dimIndex) => {
+          const label = cellLabel(tuple.row, dimension)
+          const children = dimIndex < rowDims.length - 1 && hasChildren(tuple, dimIndex)
+          const prefix = prefixKey(tuple, dimIndex)
+          const collapsed = this._collapsed.has(prefix)
+          const toggle = children
+            ? `<span class="expand" data-prefix="${this._escape(prefix)}">${collapsed ? '>' : 'v'}</span>`
+            : ''
           const dimRule = firstMatchingRule(rules, 'dimension')
-          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${this._escape(cell.label || '')}</td>`
+          table += `<td class="dim" title="${this._escape(cellId(tuple.row, dimension))}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${toggle}${this._escape(label)}</td>`
         })
-        measures.forEach((measure, measureIndex) => {
-          const bound = row[measure.key] || {}
-          const original = bound.raw
-          const key = changeKey(row, dimensions, measure.key)
-          const pending = this._pending.get(key)
-          const current = pending ? pending.value : original
-          if (typeof current === 'number' && !Number.isNaN(current)) {
-            totals[measureIndex] += current
-          }
-          const isChanged = !!pending
-          const display = formatNumber(current, formatOpts, bound.formatted)
-          const unit = bound.unit ? ` title="${this._escape(bound.unit)}"` : ''
-          const measureKind = editable ? 'editable' : 'readonly-account'
-          const measureRule = firstMatchingRule(rules, measureKind)
-          const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
-          if (editable) {
-            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
-            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" />`
-            table += '</td>'
-          } else {
-            table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
-          }
+        if (colDim) {
+          table += `<td class="dim" style="${cellChrome}"></td>`
+        }
+        colMembers.forEach((member, colIndex) => {
+          measureList.forEach((measure, measureIndex) => {
+            const source = this._cellIndex.get(tuple.key + '||' + member.id + '||' + measure.key)
+            const bound = (source && source[measure.key]) || {}
+            const original = bound.raw
+            const pKey = tuple.key + '||' + member.id + '||' + measure.key
+            const pending = this._pending.get(pKey)
+            const current = pending ? pending.value : original
+            const isNull = current === null || current === undefined || current === ''
+            if (typeof current === 'number' && !Number.isNaN(current)) {
+              colTotals[colIndex][measureIndex] += current
+            }
+            const isChanged = !!pending
+            const display = isNull ? '' : formatNumber(current, formatOpts, bound.formatted)
+            const comment = this._comments.get(pKey)
+            const tip = [bound.unit, comment].filter(Boolean).join(' | ')
+            const unit = tip ? ` title="${this._escape(tip)}"` : ''
+            const measureKind = editable ? 'editable' : 'readonly-account'
+            const measureRule = firstMatchingRule(rules, measureKind)
+            const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
+            const nullClass = isNull ? ' null-cell' : ''
+            if (editable && !isNull) {
+              table += `<td class="measure${isChanged ? ' changed' : ''}${nullClass}" data-key="${this._escape(pKey)}" data-measure="${this._escape(measure.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
+              table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-key="${this._escape(pKey)}" data-measure="${this._escape(measure.key)}" />`
+              table += '</td>'
+            } else if (isNull) {
+              table += `<td class="measure null-cell" data-key="${this._escape(pKey)}" style="${ruleStyle(measureRule, extra)}"></td>`
+            } else {
+              table += `<td class="measure${nullClass}" data-key="${this._escape(pKey)}"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
+            }
+          })
         })
         table += '</tr>'
       })
@@ -514,21 +675,36 @@
 
       if (this.showTotals !== false) {
         table += '<tfoot><tr>'
-        table += `<td colspan="${dimensions.length}" style="${cellChrome};text-align:${hAlign}">Total</td>`
-        totals.forEach(total => {
-          table += `<td class="measure" style="${cellChrome};text-align:right">${this._escape(formatNumber(total, formatOpts))}</td>`
+        table += `<td colspan="${rowDimCount}" style="${cellChrome};text-align:${hAlign}">Total</td>`
+        if (colDim) {
+          table += `<td style="${cellChrome}"></td>`
+        }
+        colMembers.forEach((member, colIndex) => {
+          measureList.forEach((measure, measureIndex) => {
+            table += `<td class="measure" style="${cellChrome};text-align:right">${this._escape(formatNumber(colTotals[colIndex][measureIndex], formatOpts))}</td>`
+          })
         })
         table += '</tr></tfoot>'
       }
       table += '</table>'
 
       this._tableWrap.innerHTML = table
-      const headerCells = this._tableWrap.querySelectorAll('th')
-      headerCells.forEach(cell => {
+      this._tableWrap.querySelectorAll('th').forEach(cell => {
         cell.style.background = headerBg
         cell.style.color = headerFg
       })
-
+      this._tableWrap.querySelectorAll('.expand').forEach(btn => {
+        btn.addEventListener('click', event => {
+          event.stopPropagation()
+          const prefix = btn.getAttribute('data-prefix')
+          if (this._collapsed.has(prefix)) {
+            this._collapsed.delete(prefix)
+          } else {
+            this._collapsed.add(prefix)
+          }
+          this.render()
+        })
+      })
       this._tableWrap.querySelectorAll('input.cell-input').forEach(input => {
         input.addEventListener('focus', () => {
           this._editing = true
@@ -536,7 +712,7 @@
         })
         input.addEventListener('blur', () => {
           this._editing = false
-          this._commitInput(input, data, dimensions, measures, decimalPlaces)
+          this._commitInput(input, measureList, decimalPlaces)
         })
         input.addEventListener('keydown', event => {
           if (event.key === 'Enter') {
@@ -549,50 +725,74 @@
           }
         })
       })
+      if (this.allowComments) {
+        this._tableWrap.querySelectorAll('td.measure').forEach(cell => {
+          cell.addEventListener('contextmenu', event => {
+            event.preventDefault()
+            const key = cell.getAttribute('data-key')
+            if (!key) {
+              return
+            }
+            const next = window.prompt('Data point comment', this._comments.get(key) || '')
+            if (next === null) {
+              return
+            }
+            if (next) {
+              this._comments.set(key, next)
+            } else {
+              this._comments.delete(key)
+            }
+            this.render()
+          })
+        })
+      }
 
       this._renderToolbar()
     }
 
-    _commitInput (input, data, dimensions, measures, decimalPlaces) {
-      const rowIndex = Number(input.getAttribute('data-row'))
+    _commitInput (input, measures, decimalPlaces) {
+      const pKey = input.getAttribute('data-key')
       const measureKey = input.getAttribute('data-measure')
-      const row = data[rowIndex]
+      const source = this._cellIndex.get(pKey)
       const measure = measures.find(item => item.key === measureKey)
-      if (!row || !measure) {
+      if (!source || !measure) {
         return
       }
-      const bound = row[measure.key] || {}
+      const bound = source[measure.key] || {}
       const original = bound.raw
       const parsed = parseInputNumber(input.value)
-      const key = changeKey(row, dimensions, measure.key)
 
       if (parsed === null) {
-        this._pending.delete(key)
+        this._pending.delete(pKey)
         this.render()
         return
       }
 
       const originalNumber = typeof original === 'number' ? original : parseInputNumber(original)
       if (originalNumber !== null && Math.abs(parsed - originalNumber) < Math.pow(10, -Math.max(decimalPlaces, 6))) {
-        this._pending.delete(key)
+        this._pending.delete(pKey)
         this.render()
         return
       }
 
-      const change = toPlanningChange(row, dimensions, measure, original, parsed)
-      this._pending.set(key, { value: parsed, change })
+      const change = toPlanningChange(source, this._dimensions, measure, original, parsed)
+      this._pending.set(pKey, { value: parsed, change })
       this._lastChange = change
       this.render()
       this.dispatchEvent(new Event('onCellChange'))
+      if ((this.dataEntryMode || 'Fluid Data Entry Mode') === 'Fluid Data Entry Mode') {
+        this.submitChanges()
+      }
     }
 
     _renderToolbar () {
       const count = this._pending.size
-      const locked = !!this.readOnly
+      const locked = !!this.readOnly || !!this.disableInteraction || this.planningEnabled === false
+      const type = this.tableType || 'Cross-Tab'
       this._toolbar.innerHTML = `
         <button id="btn-submit" ${count && !locked ? '' : 'disabled'}>Submit</button>
         <button id="btn-revert" class="secondary" ${count ? '' : 'disabled'}>Revert</button>
-        <span class="status">${locked ? 'Read only' : (count ? count + ' unpublished change' + (count === 1 ? '' : 's') : 'No unpublished changes')}</span>
+        <span class="status">${this._escape(type)}${this.dataLocking ? ' · Locking' : ''}${this.dataAccessControl ? ' · DAC' : ''} · ${locked ? 'Read only' : (count ? count + ' unpublished change' + (count === 1 ? '' : 's') : 'No unpublished changes')}</span>
       `
       const submit = this._shadowRoot.getElementById('btn-submit')
       const revert = this._shadowRoot.getElementById('btn-revert')

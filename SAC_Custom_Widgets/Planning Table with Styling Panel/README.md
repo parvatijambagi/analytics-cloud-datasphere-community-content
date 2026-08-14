@@ -30,7 +30,7 @@ The ZIP must keep `main.js` and `styling.js` at the archive root. Those names ma
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.1.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.2.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 ## If the widget says data binding failed
 
@@ -92,13 +92,15 @@ Use the widget **Submit** button (or `PlanningTable_1.submitChanges()`), then in
 
 ## Styling panel
 
-Matches the native SAC table styling sections:
+Matches the native SAC table styling and Builder sections as far as a custom widget can:
 
-- **Styling Rules** — default list (Editable IHBs, Read-only Accounts IHB, Read-only IHB, ReadOnlyInternalAccounts, Editable, Read-only). Top rule wins. Set background and font color per rule; empty styles are skipped so lower rules can apply.
-- **Lines** — simple line, weight, color, solid/dashed/dotted, left/right padding
-- **Font** — Arial/72/Helvetica, size 14, color, bold/italic, underline, strikethrough, horizontal/vertical alignment
-- **Number Format** — all measures, scale (thousand/million/billion/percent), scale suffix, decimal places, show sign as
-- Header colors, changed-cell highlight, totals, toolbar, read-only
+- **Table Type** — Cross-Tab (Version on columns) or Forecast Layout (Date/Time on columns)
+- **Rows / Columns** — come from the SAC **Builder** data binding. Put ARE, Cost Center, Depthstructure in dimensions; put Version in the same feed to pivot it onto columns; put Local Currency and Global Currency in measures
+- **Planning** — enabled, fluid data entry, locking/DAC indicators, booked/unbooked display
+- **Table Properties** — comments (right-click), calculation priority, disable interaction, data refresh
+- **Styling Rules, Lines, Font, Number Format** — as before
+
+Native-only (shown but disabled): Validation Rules, Data Analyzer, Excel Add-in, Quick Builder. Those stay on a standard SAC table.
 
 ## Requirements
 

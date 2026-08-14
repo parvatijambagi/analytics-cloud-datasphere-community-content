@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-+KVDYfdDqn8+hw6kiFAIKO4/d1KLiqbrHzI2b0dcNMI=",
+      "integrity": "sha256-318t3E3DDKzuqtwzfmXTZSxwW1/Ahw7RsAfD8L2+cDs=",
       "ignoreIntegrity": false
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling",
       "url": "/styling.js",
-      "integrity": "sha256-QlGKSXQxxIDHVH2yfjbTxBiEwcCN+eEGQOvfoB+dA34=",
+      "integrity": "sha256-4fC+UdS7hdYEBiK14ZXtf6HSoX8Np06b68Xa5z4Pg5Q=",
       "ignoreIntegrity": false
     }
   ],
@@ -169,6 +169,71 @@
       "type": "boolean",
       "default": true,
       "description": "Show Submit and Revert actions"
+    },
+    "tableType": {
+      "type": "string",
+      "default": "Cross-Tab",
+      "description": "Cross-Tab or Forecast Layout"
+    },
+    "columnDimension": {
+      "type": "string",
+      "default": "Auto",
+      "description": "Dimension to pivot onto columns (Auto, Version, Date, or a dimension name)"
+    },
+    "planningEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Allow planning input on measure cells"
+    },
+    "dataEntryMode": {
+      "type": "string",
+      "default": "Fluid Data Entry Mode",
+      "description": "Fluid Data Entry Mode, Single Cell, or Mass"
+    },
+    "dataLocking": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show data locking in the toolbar (native locks still require a hidden SAC table)"
+    },
+    "dataAccessControl": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show data access control indicator"
+    },
+    "autoPlanningArea": {
+      "type": "boolean",
+      "default": false,
+      "description": "Recommended planning area auto-generate (display)"
+    },
+    "bookedUnbooked": {
+      "type": "string",
+      "default": "No Restrictions",
+      "description": "No Restrictions or Booked Only"
+    },
+    "allowComments": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow data point comments via right-click"
+    },
+    "calcPriority": {
+      "type": "string",
+      "default": "Unresolved",
+      "description": "Intersecting client calculations priority"
+    },
+    "classicOuterMembers": {
+      "type": "boolean",
+      "default": false,
+      "description": "Classic display of outer dimension members"
+    },
+    "disableInteraction": {
+      "type": "boolean",
+      "default": false,
+      "description": "Disable cell editing and interaction"
+    },
+    "dataRefresh": {
+      "type": "string",
+      "default": "Always Refresh",
+      "description": "Always Refresh, Refresh Active Widgets Only, or Always Pause"
     }
   },
   "methods": {
