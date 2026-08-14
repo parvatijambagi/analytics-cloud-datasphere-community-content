@@ -1,6 +1,7 @@
 (function () {
   const parseMetadata = metadata => {
-    const { dimensions: dimensionsMap, mainStructureMembers: measuresMap } = metadata
+    const dimensionsMap = (metadata && metadata.dimensions) || {}
+    const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
     const dimensions = []
     for (const key in dimensionsMap) {
       dimensions.push({ key, ...dimensionsMap[key] })
@@ -10,6 +11,23 @@
       measures.push({ key, ...measuresMap[key] })
     }
     return { dimensions, measures }
+  }
+
+  const setupMessage = extra => {
+    return `
+      <div class="placeholder">
+        <strong>Connect data in the Builder panel</strong>
+        <ol>
+          <li>Use an <em>Optimized Story</em> (not Classic).</li>
+          <li>Select this widget, open <em>Builder</em> (not Styling).</li>
+          <li>Choose a model.</li>
+          <li>Add at least one dimension to <em>Row dimensions</em>.</li>
+          <li>Add at least one measure or account to <em>Editable measures or accounts</em>.</li>
+          <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
+        </ol>
+        ${extra ? `<p>${extra}</p>` : ''}
+      </div>
+    `
   }
 
   const rowKey = (row, dimensions) => {
@@ -183,6 +201,14 @@
         padding: 16px;
         color: #556b82;
         font-size: 13px;
+        line-height: 1.45;
+      }
+      .placeholder ol {
+        margin: 8px 0 0 18px;
+        padding: 0;
+      }
+      .placeholder p {
+        margin: 12px 0 0;
       }
       .error {
         color: #aa0808;
@@ -222,6 +248,9 @@
 
     onCustomWidgetAfterUpdate (changedProps) {
       Object.assign(this._props, changedProps || {})
+      if (changedProps && changedProps.dataBinding) {
+        this._bindingFromUpdate = changedProps.dataBinding
+      }
       if (!this._editing) {
         this.render()
       }
@@ -257,43 +286,74 @@
       }))
     }
 
+    _resolveDataBinding () {
+      if (this.dataBinding && typeof this.dataBinding === 'object') {
+        return this.dataBinding
+      }
+      if (this._bindingFromUpdate && typeof this._bindingFromUpdate === 'object') {
+        return this._bindingFromUpdate
+      }
+      try {
+        if (this.dataBindings && typeof this.dataBindings.getDataBinding === 'function') {
+          const binding = this.dataBindings.getDataBinding('dataBinding')
+          if (binding && binding.state) {
+            return binding
+          }
+        }
+      } catch (ignore) {}
+      return this._props && this._props.dataBinding
+    }
+
     render () {
-      const dataBinding = this.dataBinding
+      const dataBinding = this._resolveDataBinding()
       this._root.style.fontSize = (this.fontSize || 13) + 'px'
       this._toolbar.style.display = this.showToolbar === false ? 'none' : 'flex'
 
-      if (!dataBinding || dataBinding.state === 'loading') {
-        this._tableWrap.innerHTML = '<div class="placeholder">Bind a planning model, then add row dimensions and measures or accounts.</div>'
+      try {
+        this._renderTable(dataBinding)
+      } catch (err) {
+        this._tableWrap.innerHTML = `<div class="error">The table could not be rendered. ${this._escape(err && err.message ? err.message : err)}</div>`
         this._renderToolbar()
-        return
       }
-      if (dataBinding.state === 'error') {
-        this._tableWrap.innerHTML = '<div class="error">The data binding could not be loaded. Check the model, filters, and feeds.</div>'
-        this._renderToolbar()
-        return
-      }
-      if (dataBinding.state !== 'success') {
-        this._tableWrap.innerHTML = '<div class="placeholder">Waiting for data binding…</div>'
-        this._renderToolbar()
-        return
-      }
+    }
 
-      const { data, metadata } = dataBinding
-      if (!metadata) {
-        this._tableWrap.innerHTML = '<div class="placeholder">No metadata is available for this binding.</div>'
-        this._renderToolbar()
-        return
-      }
-
+    _renderTable (dataBinding) {
+      const state = dataBinding && dataBinding.state
+      const data = dataBinding && dataBinding.data
+      const metadata = dataBinding && dataBinding.metadata
       const { dimensions, measures } = parseMetadata(metadata)
+      const hasFeeds = dimensions.length > 0 && measures.length > 0
+
+      if (!dataBinding || state === 'loading' || !state) {
+        this._tableWrap.innerHTML = setupMessage('Waiting for the data binding to finish loading.')
+        this._renderToolbar()
+        return
+      }
+
+      if (state !== 'success' && !(data && metadata && hasFeeds)) {
+        this._tableWrap.innerHTML = setupMessage(
+          state === 'error'
+            ? 'SAC reported a data-binding error. This usually means the model, Version, or feeds are not set yet.'
+            : `Binding state: ${this._escape(state)}.`
+        )
+        this._renderToolbar()
+        return
+      }
+
+      if (!hasFeeds) {
+        this._tableWrap.innerHTML = setupMessage('The model is selected, but the dimension and measure feeds are still empty.')
+        this._renderToolbar()
+        return
+      }
+
+      if (!data || !data.length) {
+        this._tableWrap.innerHTML = setupMessage('Feeds are set, but no rows were returned. Check Version, filters, and booked data (or enable unbooked members on a native table first).')
+        this._renderToolbar()
+        return
+      }
+
       this._dimensions = dimensions
       this._measures = measures
-
-      if (!data || !data.length || !dimensions.length || !measures.length) {
-        this._tableWrap.innerHTML = '<div class="placeholder">Add at least one dimension and one measure or account in the Builder panel.</div>'
-        this._renderToolbar()
-        return
-      }
 
       const headerBg = this.headerBackground || '#0854A0'
       const headerFg = this.headerTextColor || '#FFFFFF'

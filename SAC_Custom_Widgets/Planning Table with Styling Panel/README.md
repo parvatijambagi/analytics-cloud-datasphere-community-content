@@ -30,6 +30,20 @@ The ZIP must keep `main.js` and `styling.js` at the archive root. Those names ma
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
+Re-upload as version **1.0.1** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+
+## If the widget says data binding failed
+
+That message means SAC has not returned a successful result set yet. It is not a ZIP/JSON load failure (the widget is already running).
+
+1. Confirm the story is **Optimized**.
+2. Select the widget → **Builder** panel (left), not Styling.
+3. Assign a model.
+4. Drag **at least one dimension** into *Row dimensions*.
+5. Drag **at least one measure or account** into *Editable measures or accounts*. Both feeds are required.
+6. For planning models, add a **Version** filter (and Date/Time if the model requires it).
+7. Compare with a native Table on the same model: if the native table is empty, the custom widget will be empty too.
+
 ## Story setup for write-back
 
 1. Add this custom widget and bind it to the planning model.
