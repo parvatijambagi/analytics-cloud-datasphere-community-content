@@ -14,6 +14,8 @@ Custom widgets can **read** planning data through data binding. They cannot call
 | `main.js` | Editable planning table web component |
 | `styling.js` | Styling panel (colors, decimals, totals, read-only) |
 
+A copy without spaces in the path (easier to download from GitHub): `../planning-table-package/` (`PlanningTable.json` + `PlanningTable.zip`).
+
 ## Install (JSON + ZIP)
 
 This is the SAC resource-upload flow. You do not host the JavaScript files yourself.
