@@ -8,18 +8,25 @@ Custom widgets can **read** planning data through data binding. They cannot call
 
 | File | Role |
 | --- | --- |
-| `index.json` | Widget contribution (data binding, properties, methods, events) |
+| `PlanningTable.json` | Widget contribution to upload in SAC |
+| `PlanningTable.zip` | Resource archive (`main.js` + `styling.js`) prompted after the JSON |
+| `index.json` | Same contribution as `PlanningTable.json` (source copy) |
 | `main.js` | Editable planning table web component |
 | `styling.js` | Styling panel (colors, decimals, totals, read-only) |
 
-## Install
+## Install (JSON + ZIP)
 
-1. Host `main.js` and `styling.js` (GitHub Pages, SAP BTP, or another HTTPS host).
-2. In `index.json`, set each `webcomponents.url` to the hosted path (for example `https://your-host/.../main.js`).
-3. In SAP Analytics Cloud, go to **Stories → Custom Widgets** (or **Analytic Applications → Custom Widgets**) and upload `index.json`.
-4. Add **Planning Table** to an Optimized Story. In the Builder panel, assign a **planning model**, then add row dimensions and measures or accounts.
+This is the SAC resource-upload flow. You do not host the JavaScript files yourself.
 
-See [hosting custom widget resources](https://community.sap.com/t5/technology-blogs-by-sap/hosting-and-uploading-custom-widgets-resource-files-into-sap-analytics/ba-p/13563064).
+1. In SAP Analytics Cloud, open **Custom Widgets** (from the story or analytic application area; you need permission to add widgets).
+2. Click **+** / **Upload** and select **`PlanningTable.json`**.
+3. When SAC asks for the **resource file**, upload **`PlanningTable.zip`**.
+4. Confirm the widget **Planning Table** appears in the list.
+5. Open or create an **Optimized Story**, insert **Planning Table**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
+
+The ZIP must keep `main.js` and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/styling.js`).
+
+If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
 ## Story setup for write-back
 
