@@ -1,9 +1,19 @@
 {
-  "powerBiRowsPath": "first(body('Run_a_query_against_a_dataset')?['results'])?['tables'][0]?['rows']",
-  "filterArray_presentAndDutyAvoidedPositive": "@and(not(empty(string(item()?['Export']))), not(empty(string(item()?['Import']))), greater(float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], item()?['[Duty Avoided]'], 0)), ',', '')), 0))",
-  "filterArray_yesFlagsAndDutyAvoidedPositive": "@and(or(equals(toLower(string(item()?['Export'])), 'yes'), equals(string(item()?['Export']), '1'), equals(item()?['Export'], true)), or(equals(toLower(string(item()?['Import'])), 'yes'), equals(string(item()?['Import']), '1'), equals(item()?['Import'], true)), greater(float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], item()?['[Duty Avoided]'], 0)), ',', '')), 0))",
+  "flow": [
+    "Recurrence",
+    "Run a query against a dataset  OR  List rows present in a table",
+    "Filter array",
+    "Apply to each",
+    "Send an email (V2)"
+  ],
+  "filterArrayFrom_powerBi": "first(body('Run_a_query_against_a_dataset')?['results'])?['tables'][0]?['rows']",
+  "filterArrayFrom_excelOrSharePoint": "body('List_rows_present_in_a_table')?['value']",
+  "filterArray_yesAndDutyAvoidedPositive": "@and(or(equals(toLower(string(item()?['Export'])), 'yes'), equals(toLower(string(item()?['[Export]'])), 'yes'), equals(string(item()?['Export']), '1'), equals(item()?['Export'], true)), or(equals(toLower(string(item()?['Import'])), 'yes'), equals(toLower(string(item()?['[Import]'])), 'yes'), equals(string(item()?['Import']), '1'), equals(item()?['Import'], true)), greater(float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], item()?['[Duty Avoided]'], 0)), ',', '')), 0))",
+  "filterArray_allPresentAndDutyAvoidedPositive": "@and(not(empty(string(coalesce(item()?['Export'], item()?['[Export]'], '')))), not(empty(string(coalesce(item()?['Import'], item()?['[Import]'], '')))), greater(float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], item()?['[Duty Avoided]'], 0)), ',', '')), 0))",
+  "applyToEachFrom": "body('Filter_array')",
+  "condition_exportIsYes": "toLower(string(coalesce(items('Apply_to_each')?['Export'], items('Apply_to_each')?['[Export]'], '')))",
+  "condition_importIsYes": "toLower(string(coalesce(items('Apply_to_each')?['Import'], items('Apply_to_each')?['[Import]'], '')))",
   "condition_dutyAvoidedGreaterThanZero": "float(replace(string(coalesce(items('Apply_to_each')?['DutyAvoided'], items('Apply_to_each')?['Duty Avoided'], items('Apply_to_each')?['[Duty Avoided]'], 0)), ',', ''))",
   "emailTo": "trim(string(coalesce(items('Apply_to_each')?['Email'], items('Apply_to_each')?['[Email]'], '')))",
-  "skipSendIfNoEmail": "@not(empty(trim(string(coalesce(items('Apply_to_each')?['Email'], items('Apply_to_each')?['[Email]'], '')))))",
-  "daxFilterAllThree": "EVALUATE\nFILTER(\n    SUMMARIZECOLUMNS(\n        'Users'[Email],\n        \"Export\", [Export],\n        \"Import\", [Import],\n        \"DutyAvoided\", [Duty Avoided]\n    ),\n    NOT ISBLANK([Export]) && NOT ISBLANK([Import]) && [DutyAvoided] > 0\n)\n"
+  "skipSendIfNoEmail": "@not(empty(trim(string(coalesce(items('Apply_to_each')?['Email'], items('Apply_to_each')?['[Email]'], '')))))"
 }

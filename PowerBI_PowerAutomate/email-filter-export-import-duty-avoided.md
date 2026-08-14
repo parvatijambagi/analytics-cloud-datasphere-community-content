@@ -1,170 +1,177 @@
-# Power BI + Power Automate: email users by Export, Import, and Duty Avoided
+# Power Automate: email users filtered by Export, Import, and Duty Avoided
 
-Use this when a **Condition** or **Filter array** in Power Automate fails after you add Export, Import, and Duty Avoided.
+Build this entirely in **Power Automate**. Do not put Export / Import / Duty Avoided into a Condition as raw dynamic content. That is what makes the action fail (red), usually with *InvalidTemplate* or *Cannot convert the value to type Decimal/Boolean*.
 
-The flow does not fail because Outlook cannot send mail. It fails because those three columns are compared with the wrong type, a null value, or an invalid Filter Query.
+## Flow to create
 
-## Recommended flow
+```
+Recurrence
+  → Power BI: Run a query against a dataset
+  → Filter array          ← put Export, Import, Duty Avoided here
+  → Apply to each (filtered rows)
+       → Send an email (V2)
+```
 
-1. Recurrence (or Power BI data-driven alert).
-2. **Power BI – Run a query against a dataset** (filter in DAX first).
-3. Parse the first table from the query result.
-4. **Apply to each** row.
-5. **Send an email (V2)** to the user on that row.
+If your data is already in Excel / SharePoint (from a Power BI export), skip the Power BI action and start from **List rows present in a table**, then still use **Filter array** — not the OData **Filter Query** box.
 
-Filter in DAX when you can. Use **Filter array** only for leftover row logic. Avoid a **Condition** action that throws on null or text-vs-number.
+---
 
-## 1. Filter in the Power BI query (preferred)
+## Step 1 — Get the rows
 
-Replace table and measure names with yours. Spaces in names must be quoted.
+**Power BI connector**
+
+1. Action: **Run a query against a dataset**
+2. Workspace / Dataset: your report dataset
+3. Query text (returns every user row; filtering happens in the next action):
 
 ```dax
 EVALUATE
-VAR Result =
-    SUMMARIZECOLUMNS(
-        'Users'[Email],
-        'Users'[UserName],
-        "Export", [Export],
-        "Import", [Import],
-        "DutyAvoided", [Duty Avoided]
-    )
-RETURN
-FILTER(
-    Result,
-    NOT ISBLANK ( [Export] )
-        && NOT ISBLANK ( [Import] )
-        && NOT ISBLANK ( [DutyAvoided] )
-        && [DutyAvoided] > 0
+SUMMARIZECOLUMNS(
+    'Users'[Email],
+    "Export", [Export],
+    "Import", [Import],
+    "DutyAvoided", [Duty Avoided]
 )
 ```
 
-If Export / Import are flags (Yes/No or 1/0):
+Change `'Users'[Email]` and the measure names to match your model.
 
-```dax
-EVALUATE
-FILTER(
-    SUMMARIZECOLUMNS(
-        'Users'[Email],
-        "Export", [Export],
-        "Import", [Import],
-        "DutyAvoided", [Duty Avoided]
-    ),
-    [Export] = 1
-        && [Import] = 1
-        && [DutyAvoided] > 0
-)
-```
+**Excel / SharePoint instead**
 
-If they are text labels:
+1. Action: **List rows present in a table**
+2. Leave **Filter Query** empty
+3. In the next step, filter with **Filter array**
 
-```dax
-EVALUATE
-FILTER(
-    SUMMARIZECOLUMNS(
-        'Users'[Email],
-        "Export", [Export],
-        "Import", [Import],
-        "DutyAvoided", [Duty Avoided]
-    ),
-    [Export] = "Yes"
-        && [Import] = "Yes"
-        && [DutyAvoided] > 0
-)
-```
+---
 
-After **Run a query against a dataset**, the rows are usually here:
+## Step 2 — Filter array (this replaces the failing Condition)
 
-`first(body('Run_a_query_against_a_dataset')?['results'])?['tables'][0]?['rows']`
+Add **Filter array**.
 
-## 2. Filter array (if you cannot change the DAX)
-
-Do **not** put this in a **Filter Query** box (OData). Put it in **Filter array** → **Edit in advanced mode**.
-
-Duty Avoided often comes back as a string (`"1250.50"`) or as `null`. A Condition then errors with *Cannot convert the value to type* or *InvalidTemplate*.
+- **From** (Power BI):
 
 ```
-@and(
-  not(empty(string(item()?['Export']))),
-  not(empty(string(item()?['Import']))),
-  greater(
-    float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], 0)), ',', '')),
-    0
-  )
-)
+first(body('Run_a_query_against_a_dataset')?['results'])?['tables'][0]?['rows']
 ```
 
-If Export and Import must both be Yes (or true / 1):
+If your action name differs, rename `Run_a_query_against_a_dataset` to the name shown on the action (spaces become underscores).
+
+- **From** (Excel / SharePoint): `body('List_rows_present_in_a_table')?['value']`
+
+Open **Edit in advanced mode** and paste **one** of these.
+
+**A. Export and Import are Yes / 1 / true, and Duty Avoided must be > 0**
 
 ```
 @and(
   or(
     equals(toLower(string(item()?['Export'])), 'yes'),
+    equals(toLower(string(item()?['[Export]'])), 'yes'),
     equals(string(item()?['Export']), '1'),
     equals(item()?['Export'], true)
   ),
   or(
     equals(toLower(string(item()?['Import'])), 'yes'),
+    equals(toLower(string(item()?['[Import]'])), 'yes'),
     equals(string(item()?['Import']), '1'),
     equals(item()?['Import'], true)
   ),
   greater(
-    float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], 0)), ',', '')),
+    float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], item()?['[Duty Avoided]'], 0)), ',', '')),
     0
   )
 )
 ```
 
-Power BI row keys are often `[Email]`, `[Export]`, `[Duty Avoided]` (brackets in the JSON name). If `item()?['Email']` is empty, use:
+**B. You only need all three fields to have a value, and Duty Avoided > 0**
 
 ```
-item()?['[Email]']
-item()?['[Export]']
-item()?['[Import]']
-item()?['[Duty Avoided]']
+@and(
+  not(empty(string(coalesce(item()?['Export'], item()?['[Export]'], '')))),
+  not(empty(string(coalesce(item()?['Import'], item()?['[Import]'], '')))),
+  greater(
+    float(replace(string(coalesce(item()?['DutyAvoided'], item()?['Duty Avoided'], item()?['[Duty Avoided]'], 0)), ',', '')),
+    0
+  )
+)
 ```
 
-## 3. Condition action (only if you must)
+Power BI often names columns `[Export]` and `[Duty Avoided]` (brackets included). The expressions above try both names.
 
-A Condition **Fails** (red) when an input is null or not a number. A Condition that is simply false shows **Succeeded** with result **No**.
+---
 
-Use expressions on each side, not raw dynamic content:
+## Step 3 — Apply to each + send email
 
-| Check | Left expression | Operator | Right |
-| --- | --- | --- | --- |
-| Export present | `string(coalesce(items('Apply_to_each')?['Export'], items('Apply_to_each')?['[Export]'], ''))` | is not equal to | *(empty)* |
-| Import present | `string(coalesce(items('Apply_to_each')?['Import'], items('Apply_to_each')?['[Import]'], ''))` | is not equal to | *(empty)* |
-| Duty Avoided > 0 | `float(replace(string(coalesce(items('Apply_to_each')?['DutyAvoided'], items('Apply_to_each')?['Duty Avoided'], items('Apply_to_each')?['[Duty Avoided]'], 0)), ',', ''))` | is greater than | `0` |
+1. **Apply to each** → From: `body('Filter_array')`
+2. Inside it, **Send an email (V2)** (Office 365 Outlook) or **Send an email** (Mail).
 
-Set the Condition to **AND**.
-
-If Export/Import must equal Yes, change those two rows to **is equal to** `Yes` and wrap with `toLower(...)`.
-
-## 4. Why the condition usually fails
-
-1. **Duty Avoided is text or null.** `greater(null, 0)` and `greater('1,250', 0)` throw. Coalesce to `0`, strip commas, then `float()`.
-2. **Column name mismatch.** `Duty Avoided` vs `DutyAvoided` vs `[Duty Avoided]`. Check the run output JSON for the exact key.
-3. **OData Filter Query.** `Duty Avoided gt 0` is invalid because of the space. That query belongs in DAX or Filter array, not OData.
-4. **Comparing the three fields to each other** (Export equals Import equals Duty Avoided). You need three separate checks combined with AND.
-5. **Boolean vs text.** Power BI `TRUE()` can arrive as `true`, `"true"`, or `1`. Use the `or(...)` pattern above.
-
-## 5. Send the email
-
-Inside **Apply to each** on the filtered rows:
-
-- **To:** `items('Apply_to_each')?['Email']` or `items('Apply_to_each')?['[Email]']`
-- **Subject:** Export / Import / Duty Avoided update
-- **Body:** include the three values with `string(...)` so blanks do not break HTML.
-
-Skip the send when email is empty:
+**To** — click **Expression**, paste:
 
 ```
-@not(empty(trim(string(coalesce(items('Apply_to_each')?['Email'], items('Apply_to_each')?['[Email]'], '')))))
+trim(string(coalesce(items('Apply_to_each')?['Email'], items('Apply_to_each')?['[Email]'], '')))
 ```
 
-## 6. Quick check from a failed run
+**Subject**
 
-Open the failed Condition / Filter array → **Inputs**.
+```
+Export / Import / Duty Avoided
+```
 
-- If Duty Avoided is `null` or `""`, the float conversion without `coalesce` is the bug.
-- If the field is missing, rename the key to match the JSON.
-- If the action is Filter Query, move the logic to DAX or Filter array as above.
+**Body** (expression examples you can insert):
+
+```
+string(coalesce(items('Apply_to_each')?['Export'], items('Apply_to_each')?['[Export]'], ''))
+string(coalesce(items('Apply_to_each')?['Import'], items('Apply_to_each')?['[Import]'], ''))
+string(coalesce(items('Apply_to_each')?['DutyAvoided'], items('Apply_to_each')?['Duty Avoided'], items('Apply_to_each')?['[Duty Avoided]'], ''))
+```
+
+Optional: wrap **Send an email** in a Condition that only checks email is present (this one will not fail):
+
+```
+not(empty(trim(string(coalesce(items('Apply_to_each')?['Email'], items('Apply_to_each')?['[Email]'], '')))))
+```
+
+is equal to `true`. Put Send email on the **If yes** side.
+
+---
+
+## If you still want a Condition action
+
+A Condition that is **red** failed on conversion. A Condition that is **green** with **No** simply did not match.
+
+Do not add:
+
+- Export  is equal to  Import  is equal to  Duty Avoided
+- Duty Avoided  is greater than  0  using the dynamic content chip
+
+Use **three rows**, group = **AND**, and expressions on the left:
+
+| Left (Expression) | Operator | Right |
+| --- | --- | --- |
+| `toLower(string(coalesce(items('Apply_to_each')?['Export'], items('Apply_to_each')?['[Export]'], '')))` | is equal to | `yes` |
+| `toLower(string(coalesce(items('Apply_to_each')?['Import'], items('Apply_to_each')?['[Import]'], '')))` | is equal to | `yes` |
+| `float(replace(string(coalesce(items('Apply_to_each')?['DutyAvoided'], items('Apply_to_each')?['Duty Avoided'], items('Apply_to_each')?['[Duty Avoided]'], 0)), ',', ''))` | is greater than | `0` |
+
+If Export/Import are numbers `1` instead of Yes, change the first two operators to **is equal to** `1` and use:
+
+```
+string(coalesce(items('Apply_to_each')?['Export'], items('Apply_to_each')?['[Export]'], ''))
+```
+
+---
+
+## Why your current condition fails in Power Automate
+
+| What you entered | What Power Automate does |
+| --- | --- |
+| Dynamic content **Duty Avoided** greater than 0 | Value is often `null` or `"1,234.00"` → action **Fails** |
+| Filter Query: `Duty Avoided gt 0` | Space in the name is invalid OData → action **Fails** |
+| One Condition: Export equals Import equals Duty Avoided | Compares the three columns to each other, not to Yes / > 0 |
+| Column `Duty Avoided` in expressions | Power BI output key is often `[Duty Avoided]` — lookup misses, then null |
+
+## Check the failed run
+
+1. Open the run → the red Condition / List rows action.
+2. **Inputs**: copy the JSON for one row.
+3. Confirm the exact keys (`Export` vs `[Export]`, `Duty Avoided` vs `DutyAvoided`).
+4. If Duty Avoided is `null` or `""`, the `coalesce(..., 0)` expressions above stop the failure.
