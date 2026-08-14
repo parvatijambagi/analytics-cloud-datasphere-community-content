@@ -92,10 +92,13 @@ Use the widget **Submit** button (or `PlanningTable_1.submitChanges()`), then in
 
 ## Styling panel
 
-- Header background and text color
-- Changed-cell highlight (default planning yellow `#FFF3B8`)
-- Font size and decimal places
-- Totals row, toolbar, and read-only
+Matches the native SAC table styling sections:
+
+- **Styling Rules** — default list (Editable IHBs, Read-only Accounts IHB, Read-only IHB, ReadOnlyInternalAccounts, Editable, Read-only). Top rule wins. Set background and font color per rule; empty styles are skipped so lower rules can apply.
+- **Lines** — simple line, weight, color, solid/dashed/dotted, left/right padding
+- **Font** — Arial/72/Helvetica, size 14, color, bold/italic, underline, strikethrough, horizontal/vertical alignment
+- **Number Format** — all measures, scale (thousand/million/billion/percent), scale suffix, decimal places, show sign as
+- Header colors, changed-cell highlight, totals, toolbar, read-only
 
 ## Requirements
 

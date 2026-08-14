@@ -41,14 +41,96 @@
     return rowKey(row, dimensions) + '||' + measureKey
   }
 
-  const formatNumber = (value, decimalPlaces) => {
+  const formatNumber = (value, options, boundFormatted) => {
     if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) {
       return ''
     }
-    return Number(value).toLocaleString(undefined, {
-      minimumFractionDigits: decimalPlaces,
-      maximumFractionDigits: decimalPlaces
+    const opts = options || {}
+    if ((opts.decimalPlaces === 'Default' || opts.decimalPlaces === '' || opts.decimalPlaces === undefined) &&
+        opts.scale === 'Default' && boundFormatted) {
+      return boundFormatted
+    }
+    let numeric = Number(value)
+    const scale = opts.scale
+    if (scale === 'Thousand') numeric = numeric / 1000
+    if (scale === 'Million') numeric = numeric / 1000000
+    if (scale === 'Billion') numeric = numeric / 1000000000
+    if (scale === 'Percent') numeric = numeric * 100
+    const digits = (opts.decimalPlaces === 'Default' || opts.decimalPlaces === '' || opts.decimalPlaces === undefined)
+      ? 2
+      : Number(opts.decimalPlaces)
+    const safeDigits = Number.isFinite(digits) ? Math.max(0, Math.min(9, digits)) : 2
+    let text = Math.abs(numeric).toLocaleString(undefined, {
+      minimumFractionDigits: safeDigits,
+      maximumFractionDigits: safeDigits
     })
+    if (scale === 'Thousand' && opts.scaleFormat !== 'Default') text += 'k'
+    if (scale === 'Million' && opts.scaleFormat !== 'Default') text += 'M'
+    if (scale === 'Billion' && opts.scaleFormat !== 'Default') text += 'Bn'
+    if (scale === 'Percent') text += '%'
+    const negative = numeric < 0
+    if (opts.showSignAs === 'Parentheses' && negative) {
+      return '(' + text + ')'
+    }
+    if (opts.showSignAs === 'PlusMinus') {
+      return (negative ? '-' : '+') + text
+    }
+    return (negative ? '-' : '') + text
+  }
+
+  const DEFAULT_RULES = [
+    { name: 'Editable IHBs', target: 'editable', background: '', color: '' },
+    { name: 'Read-only Accounts IHB', target: 'readonly-account', background: '', color: '' },
+    { name: 'Read-only IHB', target: 'readonly', background: '', color: '' },
+    { name: 'ReadOnlyInternalAccounts', target: 'readonly-account', background: '', color: '' },
+    { name: 'Editable', target: 'editable', background: '', color: '' },
+    { name: 'Read-only', target: 'readonly', background: '', color: '' }
+  ]
+
+  const parseRules = json => {
+    try {
+      const parsed = JSON.parse(json || '[]')
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed
+      }
+    } catch (ignore) {}
+    return DEFAULT_RULES.map(rule => Object.assign({}, rule))
+  }
+
+  const ruleHasStyle = rule => !!(rule && (rule.background || rule.color))
+
+  const firstMatchingRule = (rules, kind) => {
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i]
+      if (!ruleHasStyle(rule)) {
+        continue
+      }
+      const target = rule.target || 'all'
+      if (target === 'all' || target === kind) {
+        return rule
+      }
+      if (kind === 'readonly-account' && target === 'readonly') {
+        return rule
+      }
+      if (kind === 'dimension' && (target === 'readonly' || target === 'readonly-account')) {
+        return rule
+      }
+    }
+    return null
+  }
+
+  const ruleStyle = (rule, extra) => {
+    const parts = []
+    if (rule && rule.background) {
+      parts.push('background:' + rule.background)
+    }
+    if (rule && rule.color) {
+      parts.push('color:' + rule.color)
+    }
+    if (extra) {
+      parts.push(extra)
+    }
+    return parts.join(';')
   }
 
   const parseInputNumber = value => {
@@ -163,6 +245,7 @@
         padding: 6px 8px;
         white-space: nowrap;
         text-align: left;
+        vertical-align: middle;
       }
       th {
         position: sticky;
@@ -306,7 +389,8 @@
 
     render () {
       const dataBinding = this._resolveDataBinding()
-      this._root.style.fontSize = (this.fontSize || 13) + 'px'
+      this._root.style.fontSize = (this.fontSize || 14) + 'px'
+      this._root.style.fontFamily = this.fontFamily || 'Arial'
       this._toolbar.style.display = this.showToolbar === false ? 'none' : 'flex'
 
       try {
@@ -358,16 +442,39 @@
       const headerBg = this.headerBackground || '#0854A0'
       const headerFg = this.headerTextColor || '#FFFFFF'
       const changedBg = this.changedCellColor || '#FFF3B8'
-      const decimalPlaces = Number.isInteger(this.decimalPlaces) ? this.decimalPlaces : 2
+      const formatOpts = {
+        scale: this.numberScale || 'Default',
+        scaleFormat: this.numberScaleFormat || 'Default',
+        decimalPlaces: this.numberDecimalPlaces || (Number.isInteger(this.decimalPlaces) ? String(this.decimalPlaces) : 'Default'),
+        showSignAs: this.showSignAs || 'Default'
+      }
+      const numericDecimals = formatOpts.decimalPlaces === 'Default' ? 2 : Number(formatOpts.decimalPlaces)
+      const decimalPlaces = Number.isFinite(numericDecimals) ? numericDecimals : 2
       const editable = !this.readOnly
+      const rules = parseRules(this.stylingRulesJson)
+      const lineColor = this.lineColor || '#d9d9d9'
+      const lineWidth = this.lineType === 'None' ? 0 : Number(this.lineWidth || 1)
+      const lineStyle = this.lineStyle === 'Dashed' ? 'dashed' : (this.lineStyle === 'Dotted' ? 'dotted' : 'solid')
+      const padL = Number(this.leftPadding || 4)
+      const padR = Number(this.rightPadding || 4)
+      const fontFamily = this.fontFamily || 'Arial'
+      const fontSizePx = Number(this.fontSize || 14)
+      const fontColor = this.fontColor || '#32363A'
+      const fontStyle = this.fontStyle || 'Default'
+      const fontWeight = fontStyle === 'Bold' ? 'bold' : 'normal'
+      const fontItalic = fontStyle === 'Italic' ? 'italic' : 'normal'
+      const textDecor = [this.underline ? 'underline' : '', this.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || 'none'
+      const hAlign = this.hAlign || 'left'
+      const vAlign = this.vAlign || 'middle'
+      const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
       const totals = measures.map(() => 0)
-      let table = '<table><thead><tr>'
+      let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead><tr>`
       dimensions.forEach(dimension => {
-        table += `<th>${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
+        table += `<th style="${cellChrome};text-align:${hAlign}">${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
       })
       measures.forEach(measure => {
-        table += `<th class="measure">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+        table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
       })
       table += '</tr></thead><tbody>'
 
@@ -375,7 +482,8 @@
         table += '<tr>'
         dimensions.forEach(dimension => {
           const cell = row[dimension.key] || {}
-          table += `<td class="dim" title="${this._escape(cell.id || '')}">${this._escape(cell.label || '')}</td>`
+          const dimRule = firstMatchingRule(rules, 'dimension')
+          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${this._escape(cell.label || '')}</td>`
         })
         measures.forEach((measure, measureIndex) => {
           const bound = row[measure.key] || {}
@@ -387,14 +495,17 @@
             totals[measureIndex] += current
           }
           const isChanged = !!pending
-          const display = formatNumber(current, decimalPlaces)
+          const display = formatNumber(current, formatOpts, bound.formatted)
           const unit = bound.unit ? ` title="${this._escape(bound.unit)}"` : ''
+          const measureKind = editable ? 'editable' : 'readonly-account'
+          const measureRule = firstMatchingRule(rules, measureKind)
+          const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
           if (editable) {
-            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}"${unit} style="${isChanged ? 'background:' + changedBg : ''}">`
+            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
             table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" />`
             table += '</td>'
           } else {
-            table += `<td class="measure"${unit}>${this._escape(bound.formatted || display)}</td>`
+            table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
           }
         })
         table += '</tr>'
@@ -403,9 +514,9 @@
 
       if (this.showTotals !== false) {
         table += '<tfoot><tr>'
-        table += `<td colspan="${dimensions.length}">Total</td>`
+        table += `<td colspan="${dimensions.length}" style="${cellChrome};text-align:${hAlign}">Total</td>`
         totals.forEach(total => {
-          table += `<td class="measure">${this._escape(formatNumber(total, decimalPlaces))}</td>`
+          table += `<td class="measure" style="${cellChrome};text-align:right">${this._escape(formatNumber(total, formatOpts))}</td>`
         })
         table += '</tr></tfoot>'
       }

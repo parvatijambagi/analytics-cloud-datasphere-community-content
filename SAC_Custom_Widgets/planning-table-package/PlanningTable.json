@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-j5M0PAuKZxM+iy7tBXkB1b0gTxYHDGiY74FzJsxiQ5Q=",
+      "integrity": "sha256-+KVDYfdDqn8+hw6kiFAIKO4/d1KLiqbrHzI2b0dcNMI=",
       "ignoreIntegrity": false
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling",
       "url": "/styling.js",
-      "integrity": "sha256-DWS+yiVBwEBBIlIUdFD3lu+OfeFM0jyGaDu2l4ac+4U=",
+      "integrity": "sha256-QlGKSXQxxIDHVH2yfjbTxBiEwcCN+eEGQOvfoB+dA34=",
       "ignoreIntegrity": false
     }
   ],
@@ -52,8 +52,103 @@
     },
     "fontSize": {
       "type": "integer",
-      "default": 13,
+      "default": 14,
       "description": "Table font size in pixels"
+    },
+    "fontFamily": {
+      "type": "string",
+      "default": "Arial",
+      "description": "Table font family"
+    },
+    "fontColor": {
+      "type": "string",
+      "default": "#32363A",
+      "description": "Table font color"
+    },
+    "fontStyle": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default, Bold, or Italic"
+    },
+    "underline": {
+      "type": "boolean",
+      "default": false,
+      "description": "Underline text"
+    },
+    "strikethrough": {
+      "type": "boolean",
+      "default": false,
+      "description": "Strikethrough text"
+    },
+    "hAlign": {
+      "type": "string",
+      "default": "left",
+      "description": "Horizontal alignment for dimension cells"
+    },
+    "vAlign": {
+      "type": "string",
+      "default": "middle",
+      "description": "Vertical alignment"
+    },
+    "lineType": {
+      "type": "string",
+      "default": "Simple Line",
+      "description": "Cell border type"
+    },
+    "lineWidth": {
+      "type": "integer",
+      "default": 1,
+      "description": "Cell border weight"
+    },
+    "lineColor": {
+      "type": "string",
+      "default": "#d9d9d9",
+      "description": "Cell border color"
+    },
+    "lineStyle": {
+      "type": "string",
+      "default": "Solid",
+      "description": "Solid, Dashed, or Dotted"
+    },
+    "leftPadding": {
+      "type": "integer",
+      "default": 4,
+      "description": "Left cell padding in pixels"
+    },
+    "rightPadding": {
+      "type": "integer",
+      "default": 4,
+      "description": "Right cell padding in pixels"
+    },
+    "numberMeasureSelection": {
+      "type": "string",
+      "default": "All",
+      "description": "Which measures receive number format"
+    },
+    "numberScale": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default, Thousand, Million, Billion, or Percent"
+    },
+    "numberScaleFormat": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default or Suffix"
+    },
+    "numberDecimalPlaces": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default or 0-4"
+    },
+    "showSignAs": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default, Minus, Parentheses, or PlusMinus"
+    },
+    "stylingRulesJson": {
+      "type": "string",
+      "default": "[{\"name\":\"Editable IHBs\",\"target\":\"editable\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Read-only Accounts IHB\",\"target\":\"readonly-account\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Read-only IHB\",\"target\":\"readonly\",\"background\":\"\",\"color\":\"\"},{\"name\":\"ReadOnlyInternalAccounts\",\"target\":\"readonly-account\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Editable\",\"target\":\"editable\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Read-only\",\"target\":\"readonly\",\"background\":\"\",\"color\":\"\"}]",
+      "description": "JSON list of styling rules; top rule overrules those below"
     },
     "decimalPlaces": {
       "type": "integer",
