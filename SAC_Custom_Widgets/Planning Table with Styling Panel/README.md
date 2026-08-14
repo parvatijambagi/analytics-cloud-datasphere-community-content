@@ -30,7 +30,7 @@ The ZIP must keep `main.js` and `styling.js` at the archive root. Those names ma
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.4.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.5.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 ## If the widget says data binding failed
 
@@ -109,6 +109,6 @@ Optimized Story Experience (or Analytics Designer Optimized View Mode), same as 
 ## Notes
 
 - Data binding is flat (no hierarchy drill in the custom widget result set).
-- Do not add a custom Builder panel to this widget; that would replace the standard data-binding Builder.
+- The **Builder** panel now uses a native-style **Columns** group: nested **Measures** (Global Currency, Local Currency, + Add Measure) and **+ Add Dimension** under Columns for Version/Date.
 - `setUserInput` only works on input-enabled, non-calculated cells whose members already exist.
 - After a successful submit, refresh the widget data source so bound values replace the local highlight.
