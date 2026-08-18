@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-0WgrfCQe4durYxfnUbhDONKwG7UnzrHCqjC5/bcpis0=",
+      "integrity": "sha256-1zw44/obPWz+YDeoGUH3sWilyosFrWDBBBwh+3iakyA=",
       "ignoreIntegrity": false
     },
     {
       "kind": "builder",
       "tag": "com-sap-sac-sample-planning-table-builder",
       "url": "/builder.js",
-      "integrity": "sha256-5Kn6v/TtwldaeDOP+lgeawlyaDW0zwrswns+E7jdY6s=",
+      "integrity": "sha256-G5FUkmzICZqhQbhau4Zv0IImxKdpDHsGFpTCBDcHzPU=",
       "ignoreIntegrity": false
     },
     {
@@ -172,10 +172,20 @@
       "default": false,
       "description": "Disable cell editing"
     },
-    "showToolbar": {
-      "type": "boolean",
-      "default": true,
-      "description": "Show Submit and Revert actions"
+    "builderCommand": {
+      "type": "string",
+      "default": "",
+      "description": "Internal feed change command from the Builder panel"
+    },
+    "availableDimensionsJson": {
+      "type": "string",
+      "default": "[]",
+      "description": "JSON list of model dimension IDs for the Builder picker"
+    },
+    "availableMeasuresJson": {
+      "type": "string",
+      "default": "[]",
+      "description": "JSON list of model measure IDs for the Builder picker"
     },
     "tableType": {
       "type": "string",

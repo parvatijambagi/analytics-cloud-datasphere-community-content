@@ -442,6 +442,10 @@
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
       }
+      if (changedProps && changedProps.builderCommand) {
+        this._runBuilderCommand(changedProps.builderCommand)
+      }
+      this._publishCatalog()
       const pause = this.dataRefresh === 'Always Pause'
       const onlyBinding = changedProps && Object.keys(changedProps).every(key => key === 'dataBinding')
       if (pause && onlyBinding) {
@@ -498,6 +502,89 @@
         }
       } catch (ignore) {}
       return this._props && this._props.dataBinding
+    }
+
+    _feedBinding () {
+      try {
+        if (this.dataBindings && this.dataBindings.getDataBinding) {
+          return this.dataBindings.getDataBinding('dataBinding')
+        }
+      } catch (ignore) {}
+      return null
+    }
+
+    _publishCatalog () {
+      const binding = this._feedBinding()
+      let dims = []
+      let measures = []
+      try {
+        const ds = binding && binding.getDataSource && binding.getDataSource()
+        if (ds && ds.getDimensions) {
+          dims = [].concat(ds.getDimensions() || [])
+        }
+        if (ds && ds.getMeasures) {
+          measures = [].concat(ds.getMeasures() || [])
+        }
+      } catch (ignore) {}
+      const dimJson = JSON.stringify(dims)
+      const measJson = JSON.stringify(measures)
+      if (dimJson === this.availableDimensionsJson && measJson === this.availableMeasuresJson) {
+        return
+      }
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { availableDimensionsJson: dimJson, availableMeasuresJson: measJson } }
+      }))
+    }
+
+    async _runBuilderCommand (raw) {
+      if (!raw || this._runningCommand) {
+        return
+      }
+      let cmd
+      try {
+        cmd = JSON.parse(raw)
+      } catch (ignore) {
+        return
+      }
+      if (!cmd || !cmd.op || cmd.op === 'noop' || !cmd.id) {
+        return
+      }
+      const binding = this._feedBinding()
+      if (!binding) {
+        return
+      }
+      this._runningCommand = true
+      const feed = cmd.feed || 'dimensions'
+      const id = cmd.id
+      try {
+        if (cmd.op === 'addDimension' && binding.addDimensionToFeed) {
+          await binding.addDimensionToFeed(feed, id)
+        } else if (cmd.op === 'addMeasure') {
+          if (binding.addMemberToFeed) {
+            await binding.addMemberToFeed('measures', id)
+          }
+        } else if (cmd.op === 'remove') {
+          if (feed === 'measures') {
+            if (binding.removeMember) {
+              await binding.removeMember('measures', id)
+            } else if (binding.removeMemberFromFeed) {
+              await binding.removeMemberFromFeed('measures', id)
+            }
+          } else if (binding.removeDimensionFromFeed) {
+            await binding.removeDimensionFromFeed(feed, id)
+          } else if (binding.removeDimension) {
+            await binding.removeDimension(id)
+          } else if (binding.removeMember) {
+            await binding.removeMember(feed, id)
+          }
+        }
+      } catch (err) {
+        console.error('Planning table builder command failed', cmd, err)
+      }
+      this._runningCommand = false
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { builderCommand: '{"op":"noop"}' } }
+      }))
     }
 
     render () {
