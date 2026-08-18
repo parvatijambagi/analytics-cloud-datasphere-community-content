@@ -513,27 +513,99 @@
       return null
     }
 
-    _publishCatalog () {
-      const binding = this._feedBinding()
-      let dims = []
-      let measures = []
+    _asList (value) {
+      if (!value) {
+        return []
+      }
+      if (Array.isArray(value)) {
+        return value
+      }
       try {
-        const ds = binding && binding.getDataSource && binding.getDataSource()
-        if (ds && ds.getDimensions) {
-          dims = [].concat(ds.getDimensions() || [])
+        return Array.from(value)
+      } catch (ignore) {}
+      if (typeof value.size === 'number' && typeof value.get === 'function') {
+        const out = []
+        for (let i = 0; i < value.size; i++) {
+          out.push(value.get(i))
         }
-        if (ds && ds.getMeasures) {
-          measures = [].concat(ds.getMeasures() || [])
+        return out
+      }
+      return []
+    }
+
+    _itemId (item) {
+      if (item === null || item === undefined) {
+        return ''
+      }
+      if (typeof item === 'string' || typeof item === 'number') {
+        return String(item)
+      }
+      return String(item.id || item.key || item.name || item.description || '')
+    }
+
+    _itemName (item, ds, kind) {
+      const id = this._itemId(item)
+      if (item && typeof item === 'object') {
+        const named = item.description || item.label || item.name || item.displayName
+        if (named) {
+          return String(named)
+        }
+      }
+      try {
+        if (kind !== 'measure' && ds && ds.getDimensionDisplayName) {
+          return ds.getDimensionDisplayName(id) || id
+        }
+        if (kind === 'measure' && ds && ds.getMeasureDisplayName) {
+          return ds.getMeasureDisplayName(id) || id
         }
       } catch (ignore) {}
-      const dimJson = JSON.stringify(dims)
-      const measJson = JSON.stringify(measures)
-      if (dimJson === this.availableDimensionsJson && measJson === this.availableMeasuresJson) {
+      return id
+    }
+
+    async _collectCatalog () {
+      const binding = this._feedBinding()
+      const ds = binding && binding.getDataSource && binding.getDataSource()
+      const dims = []
+      const measures = []
+      const read = async (fn) => this._asList(await Promise.resolve().then(() => fn && fn()).catch(() => []))
+      if (ds) {
+        const dimRaw = await read(ds.getDimensions && ds.getDimensions.bind(ds))
+        dimRaw.forEach(item => {
+          const id = this._itemId(item)
+          if (id) {
+            dims.push({ id, name: this._itemName(item, ds, 'dimension') })
+          }
+        })
+        const measureRaw = (await read(ds.getMeasures && ds.getMeasures.bind(ds)))
+          .concat(await read(ds.getAccount && ds.getAccount.bind(ds)))
+        measureRaw.forEach(item => {
+          const id = this._itemId(item)
+          if (id) {
+            measures.push({ id, name: this._itemName(item, ds, 'measure') })
+          }
+        })
+      }
+      return { dims, measures }
+    }
+
+    _publishCatalog () {
+      if (this._publishingCatalog) {
         return
       }
-      this.dispatchEvent(new CustomEvent('propertiesChanged', {
-        detail: { properties: { availableDimensionsJson: dimJson, availableMeasuresJson: measJson } }
-      }))
+      this._publishingCatalog = true
+      Promise.resolve(this._collectCatalog()).then(catalog => {
+        const dimJson = JSON.stringify(catalog.dims || [])
+        const measJson = JSON.stringify(catalog.measures || [])
+        this._publishingCatalog = false
+        if (dimJson === this.availableDimensionsJson && measJson === this.availableMeasuresJson) {
+          return
+        }
+        this.dispatchEvent(new CustomEvent('propertiesChanged', {
+          detail: { properties: { availableDimensionsJson: dimJson, availableMeasuresJson: measJson } }
+        }))
+      }).catch(() => {
+        this._publishingCatalog = false
+      })
     }
 
     async _runBuilderCommand (raw) {

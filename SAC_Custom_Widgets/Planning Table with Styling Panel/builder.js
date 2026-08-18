@@ -8,6 +8,8 @@
         color: #32363a;
         background: #f7f7f7;
         padding: 0 0 8px;
+        position: relative;
+        min-height: 280px;
       }
       .section + .section {
         border-top: 1px solid #e5e5e5;
@@ -93,20 +95,62 @@
         padding: 4px 2px 6px;
       }
       .measures-h .label { flex: 1; }
-      .picker {
+      .popover-back {
         display: none;
-        margin: 4px 0 8px;
+        position: absolute;
+        inset: 0;
+        background: transparent;
+        z-index: 20;
       }
-      .picker.open { display: block; }
-      input[type="text"] {
-        width: 100%;
-        height: 28px;
-        box-sizing: border-box;
-        margin-top: 6px;
+      .popover-back.open { display: block; }
+      .popover {
+        display: none;
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        top: 48px;
+        max-height: 70%;
+        overflow: auto;
+        background: #fff;
         border: 1px solid #d9d9d9;
         border-radius: 4px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.18);
+        z-index: 21;
+        padding: 8px;
+      }
+      .popover.open { display: block; }
+      .search {
+        display: flex;
+        align-items: center;
+        border: 1px dashed #0854a0;
+        border-radius: 2px;
+        padding: 4px 8px;
+        margin-bottom: 8px;
+      }
+      .search input {
+        flex: 1;
+        border: 0;
+        outline: none;
         font: inherit;
-        padding: 0 8px;
+        background: transparent;
+      }
+      .group-h {
+        font-weight: 700;
+        margin: 10px 0 4px;
+        color: #32363a;
+      }
+      .row-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 4px;
+      }
+      .row-item:hover { background: #e8f3ff; }
+      .row-item input { margin: 0; }
+      .empty {
+        color: #556b82;
+        font-size: 12px;
+        padding: 8px 4px;
       }
       svg.ic {
         width: 16px;
@@ -123,6 +167,11 @@
       <div class="section">
         <div class="section-h" data-toggle="columns-body"><span class="chevron">▼</span> Columns<span class="spacer"></span><span class="menu">···</span></div>
         <div class="body" id="columns-body"></div>
+      </div>
+      <div class="popover-back" id="pop-back"></div>
+      <div class="popover" id="popover">
+        <div class="search"><input id="pop-search" placeholder="Search" /><span>🔍</span></div>
+        <div id="pop-body"></div>
       </div>
     </div>
   `
@@ -142,6 +191,10 @@
       this._measures = []
       this._allDimensions = []
       this._allMeasures = []
+      this._pickerFeed = 'dimensions'
+      this._pickerKind = 'dimension'
+      this._shadowRoot.getElementById('pop-back').addEventListener('click', () => this._closePicker())
+      this._shadowRoot.getElementById('pop-search').addEventListener('input', () => this._fillPicker())
       this._shadowRoot.querySelectorAll('[data-toggle]').forEach(el => {
         el.addEventListener('click', () => {
           const body = this._shadowRoot.getElementById(el.getAttribute('data-toggle'))
@@ -249,37 +302,78 @@
       return list.length ? list : this._allDimensions
     }
 
-    _openPicker (pickerId, selectId, inputId, kind, feedId) {
-      const picker = this._shadowRoot.getElementById(pickerId)
-      const select = this._shadowRoot.getElementById(selectId)
-      const input = this._shadowRoot.getElementById(inputId)
-      const options = kind === 'measure' ? this._allMeasures : this._availableDimensions()
-      select.innerHTML = '<option value="">Select ' + (kind === 'measure' ? 'measure' : 'dimension') + '</option>'
-      options.forEach(item => {
-        const opt = document.createElement('option')
-        opt.value = item.id || item.key
-        opt.textContent = item.name || item.id || item.key
-        select.appendChild(opt)
+    _closePicker () {
+      this._shadowRoot.getElementById('popover').classList.remove('open')
+      this._shadowRoot.getElementById('pop-back').classList.remove('open')
+    }
+
+    _openModelPicker (kind, feedId) {
+      this._pickerKind = kind
+      this._pickerFeed = feedId
+      this._shadowRoot.getElementById('pop-search').value = ''
+      this._fillPicker()
+      this._shadowRoot.getElementById('pop-back').classList.add('open')
+      this._shadowRoot.getElementById('popover').classList.add('open')
+      this._shadowRoot.getElementById('pop-search').focus()
+    }
+
+    _fillPicker () {
+      const q = (this._shadowRoot.getElementById('pop-search').value || '').toLowerCase()
+      const body = this._shadowRoot.getElementById('pop-body')
+      const used = this._pickerKind === 'measure'
+        ? this._measures.map(item => (item.id || item.name || item.key || '').toLowerCase())
+        : this._usedDimensionIds().map(id => String(id).toLowerCase())
+      const source = this._pickerKind === 'measure' ? this._allMeasures : this._availableDimensions()
+      const filtered = source.filter(item => {
+        const name = (item.name || item.id || item.key || '').toLowerCase()
+        return !q || name.indexOf(q) !== -1
       })
-      picker.classList.add('open')
-      select.onchange = () => {
-        const id = select.value
-        if (!id) {
-          return
+      if (this._pickerKind === 'measure') {
+        body.innerHTML =
+          '<div class="group-h">▼ Measure Input Control</div>' +
+          '<div class="row-item" style="color:#0854a0">+ Add Measure Input Control</div>' +
+          '<div class="group-h">▼ Measures and Calculations</div>' +
+          '<div class="row-item"><input type="checkbox" id="all-measures" /><span>' + ruler + '</span><span>All Measures and Calculations</span></div>' +
+          '<div class="group-h">▼ Calculations</div>' +
+          '<div class="row-item" style="color:#0854a0">+ Add Calculation</div>' +
+          '<div class="group-h">▼ Measures</div>' +
+          (filtered.length ? filtered.map(item => this._pickerRow(item, used, 'measure')).join('') : '<div class="empty">No measures found. Assign a model, then try again.</div>')
+        const all = this._shadowRoot.getElementById('all-measures')
+        if (all) {
+          all.addEventListener('change', () => {
+            if (!all.checked) {
+              return
+            }
+            filtered.forEach(item => this._assign('measure', 'measures', item.id || item.key))
+            this._closePicker()
+          })
         }
-        picker.classList.remove('open')
-        this._assign(kind, feedId, id)
+      } else {
+        body.innerHTML =
+          '<div class="group-h">▼ Calculated Dimensions</div>' +
+          '<div class="row-item" style="color:#0854a0">+ Add Calculated Dimension</div>' +
+          '<div class="group-h">▼ Dimension Input Control</div>' +
+          '<div class="row-item" style="color:#0854a0">+ Add Dimension Input Control</div>' +
+          '<div class="group-h">▼ Dimensions</div>' +
+          (filtered.length ? filtered.map(item => this._pickerRow(item, used, 'dimension')).join('') : '<div class="empty">No dimensions found. Assign a model, then try again.</div>')
       }
-      if (input) {
-        input.value = ''
-        input.onkeydown = event => {
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            picker.classList.remove('open')
-            this._assign(kind, feedId, input.value)
+      body.querySelectorAll('input[data-id]').forEach(box => {
+        box.addEventListener('change', () => {
+          if (!box.checked) {
+            return
           }
-        }
-      }
+          this._assign(this._pickerKind, this._pickerFeed, box.getAttribute('data-id'))
+          this._closePicker()
+        })
+      })
+    }
+
+    _pickerRow (item, used, kind) {
+      const id = item.id || item.key
+      const name = item.name || id
+      const checked = used.indexOf(String(id).toLowerCase()) !== -1 || used.indexOf(String(name).toLowerCase()) !== -1 ? ' checked' : ''
+      const icon = kind === 'measure' ? ruler : clover
+      return '<label class="row-item"><input type="checkbox" data-id="' + this._esc(id) + '"' + checked + ' />' + icon + '<span>' + this._esc(name) + '</span></label>'
     }
 
     _chip (item, feedId, icon) {
@@ -292,8 +386,7 @@
         ? this._rows.map(item => this._chip(item, 'dimensions', clover)).join('')
         : ''
       rows.innerHTML = rowChips +
-        '<button class="link" id="add-row-dim">' + plus + ' Add Dimension</button>' +
-        '<div class="picker" id="pick-row-dim"><select id="select-row-dim"></select><input id="type-row-dim" placeholder="Or type a dimension ID and press Enter" /></div>'
+        '<button class="link" id="add-row-dim">' + plus + ' Add Dimension</button>'
 
       const col = this._shadowRoot.getElementById('columns-body')
       const measureChips = this._measures.map(item => this._chip(item, 'measures', ruler)).join('')
@@ -305,11 +398,9 @@
           '<button class="x" id="remove-measures" title="Remove Measures">×</button></div>' +
           measureChips +
           '<button class="link" id="add-measure">' + plus + ' Add Measure</button>' +
-          '<div class="picker" id="pick-measure"><select id="select-measure"></select><input id="type-measure" placeholder="Or type a measure ID and press Enter" /></div>' +
         '</div>' +
         columnChips +
-        '<button class="link" id="add-col-dim">' + plus + ' Add Dimension</button>' +
-        '<div class="picker" id="pick-col-dim"><select id="select-col-dim"></select><input id="type-col-dim" placeholder="Or type a dimension ID and press Enter" /></div>'
+        '<button class="link" id="add-col-dim">' + plus + ' Add Dimension</button>'
 
       const on = (id, fn) => {
         const el = this._shadowRoot.getElementById(id)
@@ -320,9 +411,9 @@
           })
         }
       }
-      on('add-row-dim', () => this._openPicker('pick-row-dim', 'select-row-dim', 'type-row-dim', 'dimension', 'dimensions'))
-      on('add-col-dim', () => this._openPicker('pick-col-dim', 'select-col-dim', 'type-col-dim', 'dimension', 'columns'))
-      on('add-measure', () => this._openPicker('pick-measure', 'select-measure', 'type-measure', 'measure', 'measures'))
+      on('add-row-dim', () => this._openModelPicker('dimension', 'dimensions'))
+      on('add-col-dim', () => this._openModelPicker('dimension', 'columns'))
+      on('add-measure', () => this._openModelPicker('measure', 'measures'))
       on('remove-measures', () => this._clearMeasures())
       this._shadowRoot.querySelectorAll('.x[data-feed]').forEach(btn => {
         btn.addEventListener('click', event => {
