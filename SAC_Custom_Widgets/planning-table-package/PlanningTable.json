@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-5vm/+swCx814mv6Tib9hbK/I0Ieysd8xHaT0Qsh037o=",
+      "integrity": "sha256-Ax2a3hhJPFoUWP4DYYVO3oONMQKMl9XTDwV/k8W9q7g=",
       "ignoreIntegrity": false
     },
     {
       "kind": "builder",
       "tag": "com-sap-sac-sample-planning-table-builder",
       "url": "/builder.js",
-      "integrity": "sha256-BEVbQlcD6tKaybRcjOOvBx8yqAMdkkaPm+ISoU5gtK4=",
+      "integrity": "sha256-SdZpopiqCXCc8uMwzLXzryEWbBLS3p5Gf9rDj3jh2g8=",
       "ignoreIntegrity": false
     },
     {
@@ -176,6 +176,16 @@
       "type": "string",
       "default": "",
       "description": "Internal feed change command from the Builder panel"
+    },
+    "builderLayoutJson": {
+      "type": "string",
+      "default": "",
+      "description": "Builder layout: rows, columns, measures, and dimension filters"
+    },
+    "filterMembersJson": {
+      "type": "string",
+      "default": "",
+      "description": "Dimension members loaded for the Builder filter picker"
     },
     "availableDimensionsJson": {
       "type": "string",

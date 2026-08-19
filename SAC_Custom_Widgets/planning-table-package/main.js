@@ -24,9 +24,10 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add row dimensions to <em>Rows</em> (ARE, Cost Center, Depthstructure).</li>
-          <li>Add column dimensions to <em>Columns</em> (Version, Date, or both). They stack <em>above Measures</em>. Remove Version and add Date there to replace it.</li>
-          <li>Add measures (Local Currency, Global Currency).</li>
+          <li>Add row dimensions to <em>Rows</em> only if you need them. Nothing is kept by default.</li>
+          <li>Add column dimensions under <em>Columns</em> (they appear above Measures). Use × to remove.</li>
+          <li>Add measures with <em>+ Add Measure</em>. Remove Local/Global Currency with × if you do not need them.</li>
+          <li>Use the funnel on a dimension or the <em>Filters</em> section to filter members.</li>
           <li>For a planning model, set a <em>Version</em> filter if Version is not on an axis.</li>
         </ol>
         ${extra ? `<p>${extra}</p>` : ''}
@@ -158,9 +159,41 @@
   const isVersionDim = dimension => /version/.test(dimName(dimension).toLowerCase())
   const isDateDim = dimension => /date|time|month|period|year|calmonth|fiscal/.test(dimName(dimension).toLowerCase())
 
-  const pickColumnDimensions = (dimensions, metadata, tableType, columnDimension) => {
+  const parseLayout = json => {
+    try {
+      const parsed = JSON.parse(json || '{}')
+      if (parsed && typeof parsed === 'object') {
+        return {
+          active: !!parsed.active,
+          rows: Array.isArray(parsed.rows) ? parsed.rows : [],
+          columns: Array.isArray(parsed.columns) ? parsed.columns : [],
+          measures: Array.isArray(parsed.measures) ? parsed.measures : [],
+          filters: parsed.filters && typeof parsed.filters === 'object' ? parsed.filters : {}
+        }
+      }
+    } catch (ignore) {}
+    return { active: false, rows: [], columns: [], measures: [], filters: {} }
+  }
+
+  const matchLayoutItem = (item, candidate) => {
+    const ids = [item && item.id, item && item.key, item && item.name].filter(Boolean).map(v => String(v).toLowerCase())
+    const other = [candidate && candidate.id, candidate && candidate.key, candidate && candidate.label, candidate && candidate.description, candidate && candidate.name].filter(Boolean).map(v => String(v).toLowerCase())
+    return ids.some(id => other.indexOf(id) !== -1)
+  }
+
+  const orderByLayout = (items, layoutItems) => {
+    if (!layoutItems || !layoutItems.length) {
+      return []
+    }
+    return layoutItems.map(entry => items.find(item => matchLayoutItem(entry, item))).filter(Boolean)
+  }
+
+  const pickColumnDimensions = (dimensions, metadata, tableType, columnDimension, layout) => {
     if (!dimensions || !dimensions.length) {
       return []
+    }
+    if (layout && layout.active) {
+      return orderByLayout(dimensions, layout.columns)
     }
     const feeds = (metadata && metadata.feeds) || {}
     const colFeedKeys = (feeds.columns && feeds.columns.values) || []
@@ -178,6 +211,44 @@
       return dates.length ? dates : []
     }
     return []
+  }
+
+  const pickRowDimensions = (dimensions, colDims, layout) => {
+    if (layout && layout.active) {
+      return orderByLayout(dimensions, layout.rows)
+    }
+    const colDimKeys = new Set(colDims.map(dimension => dimension.key))
+    return dimensions.filter(dimension => !colDimKeys.has(dimension.key))
+  }
+
+  const pickMeasures = (measures, layout) => {
+    if (layout && layout.active) {
+      return orderByLayout(measures, layout.measures)
+    }
+    return measures
+  }
+
+  const applyLayoutFilters = (data, dimensions, layout) => {
+    if (!layout || !layout.active || !layout.filters) {
+      return data
+    }
+    const entries = Object.keys(layout.filters).map(dimId => {
+      const allowed = (layout.filters[dimId] || []).map(id => String(id))
+      return { dimId, allowed }
+    }).filter(entry => entry.allowed.length)
+    if (!entries.length) {
+      return data
+    }
+    return data.filter(row => {
+      return entries.every(entry => {
+        const dimension = dimensions.find(item => matchLayoutItem({ id: entry.dimId }, item))
+        if (!dimension) {
+          return true
+        }
+        const id = cellId(row, dimension)
+        return entry.allowed.indexOf(String(id)) !== -1
+      })
+    })
   }
 
   const columnTuples = (data, colDims) => {
@@ -431,6 +502,7 @@
       this._collapsed = new Set()
       this._comments = new Map()
       this._cellIndex = new Map()
+      this._layout = { active: false, rows: [], columns: [], measures: [], filters: {} }
     }
 
     onCustomWidgetResize () {
@@ -442,7 +514,16 @@
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
       }
+      if (changedProps && changedProps.builderLayoutJson) {
+        this._layout = parseLayout(changedProps.builderLayoutJson)
+      }
       if (changedProps && changedProps.builderCommand) {
+        try {
+          const cmd = JSON.parse(changedProps.builderCommand)
+          if (cmd && cmd.layout && !(changedProps.builderLayoutJson)) {
+            this._layout = parseLayout(JSON.stringify(cmd.layout))
+          }
+        } catch (ignore) {}
         this._runBuilderCommand(changedProps.builderCommand)
       }
       this._publishCatalog()
@@ -608,6 +689,115 @@
       })
     }
 
+    _idsFor (cmd) {
+      const out = []
+      ;[cmd.key, cmd.id, cmd.name].forEach(value => {
+        if (value && out.indexOf(value) === -1) {
+          out.push(value)
+        }
+      })
+      if (Array.isArray(cmd.ids)) {
+        cmd.ids.forEach(value => {
+          if (value && out.indexOf(value) === -1) {
+            out.push(value)
+          }
+        })
+      }
+      return out
+    }
+
+    async _tryCall (fn) {
+      try {
+        if (fn) {
+          await fn()
+          return true
+        }
+      } catch (ignore) {}
+      return false
+    }
+
+    async _addDimension (binding, feed, id) {
+      if (!binding || !id) {
+        return
+      }
+      if (binding.addDimensionToFeed) {
+        await this._tryCall(() => binding.addDimensionToFeed(feed, id))
+        if (feed === 'columns') {
+          await this._tryCall(() => binding.addDimensionToFeed('dimensions', id))
+        }
+      } else if (binding.addDimension) {
+        await this._tryCall(() => binding.addDimension(id))
+      }
+    }
+
+    async _removeFeedItem (binding, feed, ids) {
+      if (!binding) {
+        return
+      }
+      for (const id of ids) {
+        if (feed === 'measures') {
+          if (await this._tryCall(() => binding.removeMember && binding.removeMember('measures', id))) {
+            continue
+          }
+          await this._tryCall(() => binding.removeMemberFromFeed && binding.removeMemberFromFeed('measures', id))
+        } else {
+          if (await this._tryCall(() => binding.removeDimensionFromFeed && binding.removeDimensionFromFeed(feed, id))) {
+            continue
+          }
+          if (feed === 'columns') {
+            await this._tryCall(() => binding.removeDimensionFromFeed && binding.removeDimensionFromFeed('dimensions', id))
+          }
+          if (feed === 'dimensions') {
+            await this._tryCall(() => binding.removeDimensionFromFeed && binding.removeDimensionFromFeed('columns', id))
+          }
+          await this._tryCall(() => binding.removeDimension && binding.removeDimension(id))
+          await this._tryCall(() => binding.removeMember && binding.removeMember(feed, id))
+        }
+      }
+    }
+
+    async _setDimensionFilter (dimId, members) {
+      const binding = this._feedBinding()
+      const ds = binding && binding.getDataSource && binding.getDataSource()
+      if (!ds || !dimId) {
+        return
+      }
+      try {
+        if (ds.setDimensionFilter) {
+          await ds.setDimensionFilter(dimId, members && members.length ? members : undefined)
+        } else if (ds.removeDimensionFilter && (!members || !members.length)) {
+          await ds.removeDimensionFilter(dimId)
+        }
+      } catch (err) {
+        console.error('Planning table filter failed', dimId, err)
+      }
+    }
+
+    async _loadFilterMembers (dimId) {
+      const binding = this._feedBinding()
+      const ds = binding && binding.getDataSource && binding.getDataSource()
+      const members = []
+      if (ds && dimId && ds.getMembers) {
+        try {
+          const raw = this._asList(await ds.getMembers(dimId))
+          raw.slice(0, 500).forEach(item => {
+            const id = this._itemId(item)
+            if (id) {
+              members.push({ id, name: this._itemName(item, ds, 'dimension') })
+            }
+          })
+        } catch (err) {
+          console.error('Planning table getMembers failed', dimId, err)
+        }
+      }
+      const json = JSON.stringify({ dimId, members })
+      if (json !== this.filterMembersJson) {
+        this.dispatchEvent(new CustomEvent('propertiesChanged', {
+          detail: { properties: { filterMembersJson: json } }
+        }))
+      }
+    }
+
     async _runBuilderCommand (raw) {
       if (!raw || this._runningCommand) {
         return
@@ -618,36 +808,45 @@
       } catch (ignore) {
         return
       }
-      if (!cmd || !cmd.op || cmd.op === 'noop' || !cmd.id) {
+      if (!cmd || !cmd.op || cmd.op === 'noop') {
         return
       }
-      const binding = this._feedBinding()
-      if (!binding) {
-        return
+      if (cmd.layout) {
+        this._layout = parseLayout(JSON.stringify(cmd.layout))
+        const layoutJson = JSON.stringify(this._layout)
+        if (layoutJson !== this.builderLayoutJson) {
+          this.dispatchEvent(new CustomEvent('propertiesChanged', {
+            detail: { properties: { builderLayoutJson: layoutJson } }
+          }))
+        }
       }
       this._runningCommand = true
+      const binding = this._feedBinding()
       const feed = cmd.feed || 'dimensions'
-      const id = cmd.id
+      const ids = this._idsFor(cmd)
       try {
-        if (cmd.op === 'addDimension' && binding.addDimensionToFeed) {
-          await binding.addDimensionToFeed(feed, id)
+        if (cmd.op === 'addDimension') {
+          for (const id of ids) {
+            await this._addDimension(binding, feed, id)
+          }
         } else if (cmd.op === 'addMeasure') {
-          if (binding.addMemberToFeed) {
-            await binding.addMemberToFeed('measures', id)
+          for (const id of ids) {
+            await this._tryCall(() => binding && binding.addMemberToFeed && binding.addMemberToFeed('measures', id))
+            await this._tryCall(() => binding && binding.addMember && binding.addMember('measures', id))
           }
         } else if (cmd.op === 'remove') {
-          if (feed === 'measures') {
-            if (binding.removeMember) {
-              await binding.removeMember('measures', id)
-            } else if (binding.removeMemberFromFeed) {
-              await binding.removeMemberFromFeed('measures', id)
+          await this._removeFeedItem(binding, feed === 'rows' ? 'dimensions' : feed, ids)
+        } else if (cmd.op === 'clearMeasures') {
+          await this._removeFeedItem(binding, 'measures', ids.length ? ids : (this._layout.measures || []).map(item => item.id || item.key))
+        } else if (cmd.op === 'setFilter') {
+          await this._setDimensionFilter(cmd.dimId || cmd.id, cmd.members || [])
+        } else if (cmd.op === 'loadMembers') {
+          await this._loadFilterMembers(cmd.dimId || cmd.id)
+        } else if (cmd.op === 'reorder') {
+          if (feed === 'columns' || feed === 'dimensions') {
+            for (const id of ids) {
+              await this._addDimension(binding, feed === 'rows' ? 'dimensions' : feed, id)
             }
-          } else if (binding.removeDimensionFromFeed) {
-            await binding.removeDimensionFromFeed(feed, id)
-          } else if (binding.removeDimension) {
-            await binding.removeDimension(id)
-          } else if (binding.removeMember) {
-            await binding.removeMember(feed, id)
           }
         }
       } catch (err) {
@@ -674,11 +873,16 @@
     }
 
     _renderTable (dataBinding) {
+      const layout = this._layout && this._layout.active ? this._layout : parseLayout(this.builderLayoutJson)
       const state = dataBinding && dataBinding.state
-      const data = dataBinding && dataBinding.data
+      let data = dataBinding && dataBinding.data
       const metadata = dataBinding && dataBinding.metadata
-      const { dimensions, measures } = parseMetadata(metadata)
-      const hasFeeds = dimensions.length > 0 && measures.length > 0
+      const parsed = parseMetadata(metadata)
+      const dimensions = parsed.dimensions
+      const boundMeasures = parsed.measures
+      const hasFeeds = dimensions.length > 0 && boundMeasures.length > 0
+      const layoutActive = !!(layout && layout.active)
+      const layoutEmpty = layoutActive && !layout.rows.length && !layout.columns.length && !layout.measures.length
 
       if (!dataBinding || state === 'loading' || !state) {
         this._tableWrap.innerHTML = setupMessage('Waiting for the data binding to finish loading.')
@@ -686,7 +890,13 @@
         return
       }
 
-      if (state !== 'success' && !(data && metadata && hasFeeds)) {
+      if (layoutEmpty) {
+        this._tableWrap.innerHTML = setupMessage('Nothing is assigned. Use Builder to add dimensions and measures. Remove with × to drop them from the table.')
+        this._renderToolbar()
+        return
+      }
+
+      if (state !== 'success' && !(data && metadata && (hasFeeds || layoutActive))) {
         this._tableWrap.innerHTML = setupMessage(
           state === 'error'
             ? 'SAC reported a data-binding error. This usually means the model, Version, or feeds are not set yet.'
@@ -696,8 +906,8 @@
         return
       }
 
-      if (!hasFeeds) {
-        this._tableWrap.innerHTML = setupMessage('The model is selected, but the dimension and measure feeds are still empty.')
+      if (!layoutActive && !hasFeeds) {
+        this._tableWrap.innerHTML = setupMessage('The model is selected, but no dimensions or measures are assigned yet. Add them in Builder.')
         this._renderToolbar()
         return
       }
@@ -708,8 +918,20 @@
         return
       }
 
+      const tableType = this.tableType || 'Cross-Tab'
+      const colDims = pickColumnDimensions(dimensions, metadata, tableType, this.columnDimension, layout)
+      const rowDims = pickRowDimensions(dimensions, colDims, layout)
+      const measureList = pickMeasures(boundMeasures, layout)
+      data = applyLayoutFilters(data, dimensions, layout)
+
+      if (!data.length) {
+        this._tableWrap.innerHTML = setupMessage('The current dimension filters exclude every row. Clear a filter in the Builder Filters section.')
+        this._renderToolbar()
+        return
+      }
+
       this._dimensions = dimensions
-      this._measures = measures
+      this._measures = measureList
 
       const headerBg = this.headerBackground || '#F5F6F7'
       const headerFg = this.headerTextColor || '#32363A'
@@ -741,13 +963,8 @@
       const vAlign = this.vAlign || 'middle'
       const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
-      const tableType = this.tableType || 'Cross-Tab'
-      const colDims = pickColumnDimensions(dimensions, metadata, tableType, this.columnDimension)
-      const colDimKeys = new Set(colDims.map(dimension => dimension.key))
-      const rowDims = dimensions.filter(dimension => !colDimKeys.has(dimension.key))
       const colMembers = columnTuples(data, colDims)
       const hasColDims = colDims.length > 0
-      const measureList = measures
       const rowTuples = []
       const seenRows = new Set()
       data.forEach(row => {
@@ -798,6 +1015,7 @@
       const headerStyle = cellChrome + ';background:' + headerBg + ';color:' + headerFg
       const rowDimCount = Math.max(rowDims.length, 1)
       const measureCount = measureList.length
+      const measureSpan = Math.max(measureCount, 1)
       const colHeaderRows = hasColDims ? colDims.length + 1 : 1
       const unit = (measureList[0] && data[0] && data[0][measureList[0].key] && data[0][measureList[0].key].unit) || ''
       if (this._title) {
@@ -812,13 +1030,16 @@
           }
           table += `<th class="group" style="${headerStyle}">${this._escape(dimName(dimension))}</th>`
           headerGroups(colMembers, dimIndex).forEach(group => {
-            table += `<th class="group" colspan="${group.span * measureCount}" style="${headerStyle}">${this._escape(group.label)}</th>`
+            table += `<th class="group" colspan="${group.span * measureSpan}" style="${headerStyle}">${this._escape(group.label)}</th>`
           })
           table += '</tr>'
         })
         table += '<tr>'
         table += `<th class="group" style="${headerStyle}"></th>`
         colMembers.forEach(() => {
+          if (!measureCount) {
+            table += `<th class="measure" style="${headerStyle};text-align:right">—</th>`
+          }
           measureList.forEach(measure => {
             table += `<th class="measure" style="${headerStyle};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
           })
@@ -836,6 +1057,9 @@
         measureList.forEach(measure => {
           table += `<th class="measure" style="${headerStyle};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
         })
+        if (!measureCount) {
+          table += `<th class="measure" style="${headerStyle};text-align:right">—</th>`
+        }
         table += '</tr>'
       }
       table += '</thead><tbody>'
@@ -875,6 +1099,9 @@
           table += `<td class="dim" style="${cellChrome}"></td>`
         }
         colMembers.forEach((member, colIndex) => {
+          if (!measureCount) {
+            table += `<td class="measure" style="${cellChrome}"></td>`
+          }
           measureList.forEach((measure, measureIndex) => {
             const source = this._cellIndex.get(tuple.key + '||' + member.key + '||' + measure.key)
             const bound = (source && source[measure.key]) || {}

@@ -9,7 +9,7 @@ Custom widgets can **read** planning data through data binding. They cannot call
 | File | Role |
 | --- | --- |
 | `PlanningTable.json` | Widget contribution to upload in SAC |
-| `PlanningTable.zip` | Resource archive (`main.js` + `styling.js`) prompted after the JSON |
+| `PlanningTable.zip` | Resource archive (`main.js` + `builder.js` + `styling.js`) prompted after the JSON |
 | `index.json` | Same contribution as `PlanningTable.json` (source copy) |
 | `main.js` | Editable planning table web component |
 | `styling.js` | Styling panel (colors, decimals, totals, read-only) |
@@ -26,11 +26,11 @@ This is the SAC resource-upload flow. You do not host the JavaScript files yours
 4. Confirm the widget **Planning Table** appears in the list.
 5. Open or create an **Optimized Story**, insert **Planning Table**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
 
-The ZIP must keep `main.js` and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/styling.js`).
+The ZIP must keep `main.js`, `builder.js`, and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/builder.js`, `/styling.js`).
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.8.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.9.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 ## If the widget says data binding failed
 
@@ -95,7 +95,7 @@ Use the widget **Submit** button (or `PlanningTable_1.submitChanges()`), then in
 Matches the native SAC table styling and Builder sections as far as a custom widget can:
 
 - **Table Type** — Cross-Tab or Forecast Layout
-- **Rows / Columns / Measures** — SAC **Builder** now has three wells. Rows: ARE, Cost Center, Depthstructure. Columns: Version and/or Date (stacked above Measures). You can remove Version and add Date in Columns. Measures: Local Currency, Global Currency. Auto still pivots Version and Date onto columns if they sit in a single dimension feed.
+- **Rows / Columns / Measures / Filters** — custom Builder: add only what you need, × to remove, drag to reorder, funnel to filter a dimension. Measures can be empty; column dimensions are added with **+ Add Dimension** under Columns.
 - **Planning** — enabled, fluid data entry, locking/DAC indicators, booked/unbooked display
 - **Table Properties** — comments (right-click), calculation priority, disable interaction, data refresh
 - **Styling Rules, Lines, Font, Number Format** — as before
