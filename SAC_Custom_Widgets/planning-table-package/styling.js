@@ -75,57 +75,6 @@
       }
     </style>
     <div id="root">
-      <h3>Table Type</h3>
-      <select id="tableType">
-        <option value="Cross-Tab">Cross-Tab</option>
-        <option value="Forecast Layout">Forecast Layout</option>
-      </select>
-      <p class="hint">In Builder: put ARE, Cost Center, Depthstructure in <em>Rows</em>. Put Version, Date, or both in <em>Columns</em> so they stack above Measures. Remove Version and add Date in Columns to replace it. You cannot use a custom Builder with data binding, so Rows/Columns/Measures are the SAC data-binding wells.</p>
-      <label for="columnDimension">Column dimensions</label>
-      <input id="columnDimension" type="text" placeholder="Auto, or Version,Date" />
-
-      <h3>Planning</h3>
-      <div class="checks">
-        <label><input id="planningEnabled" type="checkbox" /> Planning Enabled</label>
-        <label><input id="dataLocking" type="checkbox" /> Data Locking</label>
-        <label><input id="validationRules" type="checkbox" disabled /> Validation Rules (native table only)</label>
-        <label><input id="dataAccessControl" type="checkbox" /> Data Access Control (display)</label>
-        <label><input id="autoPlanningArea" type="checkbox" /> Auto-generate recommended planning area</label>
-      </div>
-      <label for="dataEntryMode">Default Data Entry Mode</label>
-      <select id="dataEntryMode">
-        <option value="Fluid Data Entry Mode">Fluid Data Entry Mode</option>
-        <option value="Single Cell">Single Cell</option>
-        <option value="Mass">Mass</option>
-      </select>
-      <label for="bookedUnbooked">Advanced Settings for Booked/Unbooked Data</label>
-      <select id="bookedUnbooked">
-        <option value="No Restrictions">No Restrictions</option>
-        <option value="Booked Only">Booked Only</option>
-      </select>
-
-      <h3>Table Properties</h3>
-      <div class="checks">
-        <label><input id="allowComments" type="checkbox" /> Allow data point comments (right-click a cell)</label>
-        <label><input id="classicOuterMembers" type="checkbox" /> Classic Display of Outer Dimension Members</label>
-        <label><input id="enableDataAnalyzer" type="checkbox" disabled /> Enable Data Analyzer (native table only)</label>
-        <label><input id="enableExcelAddin" type="checkbox" disabled /> Enable Excel Add-in (native table only)</label>
-        <label><input id="enableQuickBuilder" type="checkbox" disabled /> Enable Quick Builder (native table only)</label>
-        <label><input id="disableInteraction" type="checkbox" /> Disable Interaction</label>
-      </div>
-      <label for="calcPriority">Intersecting Client Calculations Priority</label>
-      <select id="calcPriority">
-        <option value="Unresolved">Unresolved</option>
-        <option value="Rows">Rows</option>
-        <option value="Columns">Columns</option>
-      </select>
-      <label for="dataRefresh">Data Refresh</label>
-      <select id="dataRefresh">
-        <option value="Always Refresh">Always Refresh</option>
-        <option value="Refresh Active Widgets Only">Refresh Active Widgets Only</option>
-        <option value="Always Pause">Always Pause</option>
-      </select>
-
       <h3>Styling Rules</h3>
       <p class="hint">Styling rule which is listed at the top overrules the ones listed below.</p>
       <div id="rules"></div>
@@ -270,9 +219,9 @@
 
       <h3>Table</h3>
       <label for="headerBackground">Header background</label>
-      <input id="headerBackground" type="text" placeholder="#F5F6F7" />
+      <input id="headerBackground" type="text" placeholder="#0854A0" />
       <label for="headerTextColor">Header text color</label>
-      <input id="headerTextColor" type="text" placeholder="#32363A" />
+      <input id="headerTextColor" type="text" placeholder="#FFFFFF" />
       <label for="changedCellColor">Changed cell color</label>
       <input id="changedCellColor" type="text" placeholder="#FFF3B8" />
       <div class="checks">
@@ -378,19 +327,6 @@
         detail: {
           properties: {
             stylingRulesJson: JSON.stringify(this._rules),
-            tableType: this._val('tableType'),
-            columnDimension: this._val('columnDimension') || 'Auto',
-            planningEnabled: this._shadowRoot.getElementById('planningEnabled').checked,
-            dataLocking: this._shadowRoot.getElementById('dataLocking').checked,
-            dataAccessControl: this._shadowRoot.getElementById('dataAccessControl').checked,
-            autoPlanningArea: this._shadowRoot.getElementById('autoPlanningArea').checked,
-            dataEntryMode: this._val('dataEntryMode'),
-            bookedUnbooked: this._val('bookedUnbooked'),
-            allowComments: this._shadowRoot.getElementById('allowComments').checked,
-            classicOuterMembers: this._shadowRoot.getElementById('classicOuterMembers').checked,
-            disableInteraction: this._shadowRoot.getElementById('disableInteraction').checked,
-            calcPriority: this._val('calcPriority'),
-            dataRefresh: this._val('dataRefresh'),
             lineType: this._val('lineType'),
             lineWidth: Number(this._val('lineWidth')),
             lineColor: this._val('lineColor'),
@@ -446,19 +382,6 @@
           }
         } catch (ignore) {}
       }
-      assign('tableType', changedProps.tableType)
-      assign('columnDimension', changedProps.columnDimension)
-      assign('planningEnabled', changedProps.planningEnabled)
-      assign('dataLocking', changedProps.dataLocking)
-      assign('dataAccessControl', changedProps.dataAccessControl)
-      assign('autoPlanningArea', changedProps.autoPlanningArea)
-      assign('dataEntryMode', changedProps.dataEntryMode)
-      assign('bookedUnbooked', changedProps.bookedUnbooked)
-      assign('allowComments', changedProps.allowComments)
-      assign('classicOuterMembers', changedProps.classicOuterMembers)
-      assign('disableInteraction', changedProps.disableInteraction)
-      assign('calcPriority', changedProps.calcPriority)
-      assign('dataRefresh', changedProps.dataRefresh)
       assign('lineType', changedProps.lineType)
       assign('lineWidth', changedProps.lineWidth)
       assign('lineColor', changedProps.lineColor)
@@ -487,7 +410,5 @@
     }
   }
 
-  if (!customElements.get('com-sap-sac-sample-planning-table-styling')) {
-    customElements.define('com-sap-sac-sample-planning-table-styling', Styling)
-  }
+  customElements.define('com-sap-sac-sample-planning-table-styling', Styling)
 })()

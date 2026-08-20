@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.12.0",
+  "version": "1.1.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,22 +15,15 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-aKADeaGY7bK5Y9u69glRU17TkPiUIuno+V8WFgrNqlA=",
-      "ignoreIntegrity": true
-    },
-    {
-      "kind": "builder",
-      "tag": "com-sap-sac-sample-planning-table-builder",
-      "url": "/builder.js",
-      "integrity": "sha256-/Vw3PKbMcn1u74Ixgyi++T3bX4+2IHxkdNPycc+znx4=",
-      "ignoreIntegrity": true
+      "integrity": "sha256-+KVDYfdDqn8+hw6kiFAIKO4/d1KLiqbrHzI2b0dcNMI=",
+      "ignoreIntegrity": false
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling",
       "url": "/styling.js",
-      "integrity": "sha256-6l8syPfNv7kLNM8Hdn/5C+6dnGaFUHIQiw3Czczz1fs=",
-      "ignoreIntegrity": true
+      "integrity": "sha256-QlGKSXQxxIDHVH2yfjbTxBiEwcCN+eEGQOvfoB+dA34=",
+      "ignoreIntegrity": false
     }
   ],
   "properties": {
@@ -44,12 +37,12 @@
     },
     "headerBackground": {
       "type": "string",
-      "default": "#F5F6F7",
+      "default": "#0854A0",
       "description": "Table header background color"
     },
     "headerTextColor": {
       "type": "string",
-      "default": "#32363A",
+      "default": "#FFFFFF",
       "description": "Table header text color"
     },
     "changedCellColor": {
@@ -164,7 +157,7 @@
     },
     "showTotals": {
       "type": "boolean",
-      "default": false,
+      "default": true,
       "description": "Show a totals row for measures"
     },
     "readOnly": {
@@ -172,100 +165,10 @@
       "default": false,
       "description": "Disable cell editing"
     },
-    "builderCommand": {
-      "type": "string",
-      "default": "",
-      "description": "Internal feed change command from the Builder panel"
-    },
-    "builderLayoutJson": {
-      "type": "string",
-      "default": "",
-      "description": "Builder layout: rows, columns, measures, and dimension filters"
-    },
-    "filterMembersJson": {
-      "type": "string",
-      "default": "",
-      "description": "Dimension members loaded for the Builder filter picker"
-    },
-    "dimensionHierarchiesJson": {
-      "type": "string",
-      "default": "",
-      "description": "Hierarchies loaded for the dimension context menu"
-    },
-    "availableDimensionsJson": {
-      "type": "string",
-      "default": "[]",
-      "description": "JSON list of model dimension IDs for the Builder picker"
-    },
-    "availableMeasuresJson": {
-      "type": "string",
-      "default": "[]",
-      "description": "JSON list of model measure IDs for the Builder picker"
-    },
-    "tableType": {
-      "type": "string",
-      "default": "Cross-Tab",
-      "description": "Cross-Tab or Forecast Layout"
-    },
-    "columnDimension": {
-      "type": "string",
-      "default": "Auto",
-      "description": "Auto (Version and Date), a name, or comma-separated names such as Version,Date"
-    },
-    "planningEnabled": {
+    "showToolbar": {
       "type": "boolean",
       "default": true,
-      "description": "Allow planning input on measure cells"
-    },
-    "dataEntryMode": {
-      "type": "string",
-      "default": "Fluid Data Entry Mode",
-      "description": "Fluid Data Entry Mode, Single Cell, or Mass"
-    },
-    "dataLocking": {
-      "type": "boolean",
-      "default": true,
-      "description": "Show data locking in the toolbar (native locks still require a hidden SAC table)"
-    },
-    "dataAccessControl": {
-      "type": "boolean",
-      "default": true,
-      "description": "Show data access control indicator"
-    },
-    "autoPlanningArea": {
-      "type": "boolean",
-      "default": false,
-      "description": "Recommended planning area auto-generate (display)"
-    },
-    "bookedUnbooked": {
-      "type": "string",
-      "default": "No Restrictions",
-      "description": "No Restrictions or Booked Only"
-    },
-    "allowComments": {
-      "type": "boolean",
-      "default": false,
-      "description": "Allow data point comments via right-click"
-    },
-    "calcPriority": {
-      "type": "string",
-      "default": "Unresolved",
-      "description": "Intersecting client calculations priority"
-    },
-    "classicOuterMembers": {
-      "type": "boolean",
-      "default": false,
-      "description": "Classic display of outer dimension members"
-    },
-    "disableInteraction": {
-      "type": "boolean",
-      "default": false,
-      "description": "Disable cell editing and interaction"
-    },
-    "dataRefresh": {
-      "type": "string",
-      "default": "Always Refresh",
-      "description": "Always Refresh, Refresh Active Widgets Only, or Always Pause"
+      "description": "Show Submit and Revert actions"
     }
   },
   "methods": {
@@ -362,17 +265,12 @@
       "feeds": [
         {
           "id": "dimensions",
-          "description": "Rows",
-          "type": "dimension"
-        },
-        {
-          "id": "columns",
-          "description": "Columns",
+          "description": "Row dimensions",
           "type": "dimension"
         },
         {
           "id": "measures",
-          "description": "Measures",
+          "description": "Editable measures or accounts",
           "type": "mainStructureMember"
         }
       ]

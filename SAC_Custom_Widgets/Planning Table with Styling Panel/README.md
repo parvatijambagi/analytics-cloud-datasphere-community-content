@@ -9,7 +9,7 @@ Custom widgets can **read** planning data through data binding. They cannot call
 | File | Role |
 | --- | --- |
 | `PlanningTable.json` | Widget contribution to upload in SAC |
-| `PlanningTable.zip` | Resource archive (`main.js` + `builder.js` + `styling.js`) prompted after the JSON |
+| `PlanningTable.zip` | Resource archive (`main.js` + `styling.js`) prompted after the JSON |
 | `index.json` | Same contribution as `PlanningTable.json` (source copy) |
 | `main.js` | Editable planning table web component |
 | `styling.js` | Styling panel (colors, decimals, totals, read-only) |
@@ -26,11 +26,11 @@ This is the SAC resource-upload flow. You do not host the JavaScript files yours
 4. Confirm the widget **Planning Table** appears in the list.
 5. Open or create an **Optimized Story**, insert **Planning Table**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
 
-The ZIP must keep `main.js`, `builder.js`, and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/builder.js`, `/styling.js`).
+The ZIP must keep `main.js` and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/styling.js`).
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.12.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.1.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 ## If the widget says data binding failed
 
@@ -92,15 +92,13 @@ Use the widget **Submit** button (or `PlanningTable_1.submitChanges()`), then in
 
 ## Styling panel
 
-Matches the native SAC table styling and Builder sections as far as a custom widget can:
+Matches the native SAC table styling sections:
 
-- **Table Type** — Cross-Tab or Forecast Layout
-- **Rows / Columns / Measures / Filters** — custom Builder: add only what you need, × to remove, drag to reorder. Dimension **···** opens Hierarchy, Display Options, Rename, Show Unbooked Data, Show Totals, Data Visibility, and Properties. The **Filters** section lists a dimension only after you apply member filters (funnel or **+ Add Filter**).
-- **Planning** — enabled, fluid data entry, locking/DAC indicators, booked/unbooked display
-- **Table Properties** — comments (right-click), calculation priority, disable interaction, data refresh
-- **Styling Rules, Lines, Font, Number Format** — as before
-
-Native-only (shown but disabled): Validation Rules, Data Analyzer, Excel Add-in, Quick Builder. Those stay on a standard SAC table.
+- **Styling Rules** — default list (Editable IHBs, Read-only Accounts IHB, Read-only IHB, ReadOnlyInternalAccounts, Editable, Read-only). Top rule wins. Set background and font color per rule; empty styles are skipped so lower rules can apply.
+- **Lines** — simple line, weight, color, solid/dashed/dotted, left/right padding
+- **Font** — Arial/72/Helvetica, size 14, color, bold/italic, underline, strikethrough, horizontal/vertical alignment
+- **Number Format** — all measures, scale (thousand/million/billion/percent), scale suffix, decimal places, show sign as
+- Header colors, changed-cell highlight, totals, toolbar, read-only
 
 ## Requirements
 
@@ -109,6 +107,6 @@ Optimized Story Experience (or Analytics Designer Optimized View Mode), same as 
 ## Notes
 
 - Data binding is flat (no hierarchy drill in the custom widget result set).
-- The **Builder** has two sections like a native table: **Rows** (all dimensions, + Add Dimension) and **Columns** (nested Measures group with + Add Measure, then + Add Dimension for Version/Date).
+- Do not add a custom Builder panel to this widget; that would replace the standard data-binding Builder.
 - `setUserInput` only works on input-enabled, non-calculated cells whose members already exist.
 - After a successful submit, refresh the widget data source so bound values replace the local highlight.
