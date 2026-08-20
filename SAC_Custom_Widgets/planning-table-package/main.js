@@ -13,6 +13,12 @@
     return { dimensions, measures }
   }
 
+  const pickColumnDimensions = (dimensions, metadata) => {
+    const feeds = (metadata && metadata.feeds) || {}
+    const keys = (feeds.columns && feeds.columns.values) || []
+    return keys.map(key => dimensions.find(dimension => dimension.key === key)).filter(Boolean)
+  }
+
   const setupMessage = extra => {
     return `
       <div class="placeholder">
@@ -21,8 +27,8 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add at least one dimension to <em>Row dimensions</em>.</li>
-          <li>Add at least one measure or account to <em>Editable measures or accounts</em>.</li>
+          <li>Add dimensions to <em>Rows</em>.</li>
+          <li>Add measures under <em>Columns → Measures</em>. Add column dimensions under <em>Columns</em> if needed.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
         </ol>
         ${extra ? `<p>${extra}</p>` : ''}
@@ -334,6 +340,10 @@
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
       }
+      if (changedProps && changedProps.builderCommand) {
+        this._runBuilderCommand(changedProps.builderCommand)
+      }
+      this._publishCatalog()
       if (!this._editing) {
         this.render()
       }
@@ -387,6 +397,99 @@
       return this._props && this._props.dataBinding
     }
 
+    _feedBinding () {
+      try {
+        if (this.dataBindings && this.dataBindings.getDataBinding) {
+          return this.dataBindings.getDataBinding('dataBinding')
+        }
+      } catch (ignore) {}
+      return null
+    }
+
+    _publishCatalog () {
+      const binding = this._feedBinding()
+      let dims = []
+      let measures = []
+      try {
+        const ds = binding && binding.getDataSource && binding.getDataSource()
+        if (ds && ds.getDimensions) {
+          dims = [].concat(ds.getDimensions() || [])
+        }
+        if (ds && ds.getMeasures) {
+          measures = [].concat(ds.getMeasures() || [])
+        }
+      } catch (ignore) {}
+      const dimJson = JSON.stringify(dims)
+      const measJson = JSON.stringify(measures)
+      if (dimJson === this.availableDimensionsJson && measJson === this.availableMeasuresJson) {
+        return
+      }
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { availableDimensionsJson: dimJson, availableMeasuresJson: measJson } }
+      }))
+    }
+
+    async _runBuilderCommand (raw) {
+      if (!raw || this._runningCommand) {
+        return
+      }
+      let cmd
+      try {
+        cmd = JSON.parse(raw)
+      } catch (ignore) {
+        return
+      }
+      if (!cmd || !cmd.op || cmd.op === 'noop' || !cmd.id) {
+        return
+      }
+      const binding = this._feedBinding()
+      if (!binding) {
+        return
+      }
+      this._runningCommand = true
+      const feed = cmd.feed || 'dimensions'
+      const id = cmd.id
+      try {
+        if (cmd.op === 'addDimension' && binding.addDimensionToFeed) {
+          await binding.addDimensionToFeed(feed, id)
+          if (feed === 'columns') {
+            try {
+              await binding.addDimensionToFeed('dimensions', id)
+            } catch (ignore) {}
+          }
+        } else if (cmd.op === 'addMeasure') {
+          if (binding.addMemberToFeed) {
+            await binding.addMemberToFeed('measures', id)
+          }
+        } else if (cmd.op === 'remove') {
+          if (feed === 'measures') {
+            if (binding.removeMember) {
+              await binding.removeMember('measures', id)
+            } else if (binding.removeMemberFromFeed) {
+              await binding.removeMemberFromFeed('measures', id)
+            }
+          } else if (binding.removeDimensionFromFeed) {
+            await binding.removeDimensionFromFeed(feed, id)
+            if (feed === 'columns') {
+              try {
+                await binding.removeDimensionFromFeed('dimensions', id)
+              } catch (ignore) {}
+            }
+          } else if (binding.removeDimension) {
+            await binding.removeDimension(id)
+          } else if (binding.removeMember) {
+            await binding.removeMember(feed, id)
+          }
+        }
+      } catch (err) {
+        console.error('Planning table builder command failed', cmd, err)
+      }
+      this._runningCommand = false
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { builderCommand: '{"op":"noop"}' } }
+      }))
+    }
+
     render () {
       const dataBinding = this._resolveDataBinding()
       this._root.style.fontSize = (this.fontSize || 14) + 'px'
@@ -406,7 +509,10 @@
       const data = dataBinding && dataBinding.data
       const metadata = dataBinding && dataBinding.metadata
       const { dimensions, measures } = parseMetadata(metadata)
-      const hasFeeds = dimensions.length > 0 && measures.length > 0
+      const colDims = pickColumnDimensions(dimensions, metadata)
+      const colKeys = new Set(colDims.map(dimension => dimension.key))
+      const rowDims = dimensions.filter(dimension => !colKeys.has(dimension.key))
+      const hasFeeds = (rowDims.length > 0 || colDims.length > 0) && measures.length > 0
 
       if (!dataBinding || state === 'loading' || !state) {
         this._tableWrap.innerHTML = setupMessage('Waiting for the data binding to finish loading.')
@@ -436,7 +542,7 @@
         return
       }
 
-      this._dimensions = dimensions
+      this._dimensions = rowDims.concat(colDims)
       this._measures = measures
 
       const headerBg = this.headerBackground || '#0854A0'
@@ -468,45 +574,109 @@
       const vAlign = this.vAlign || 'middle'
       const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
-      const totals = measures.map(() => 0)
-      let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead><tr>`
-      dimensions.forEach(dimension => {
-        table += `<th style="${cellChrome};text-align:${hAlign}">${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
+      const colMembers = []
+      if (colDims.length) {
+        const seenCols = new Set()
+        data.forEach(row => {
+          const key = colDims.map(dimension => (row[dimension.key] && row[dimension.key].id) || '').join('|')
+          if (!seenCols.has(key)) {
+            seenCols.add(key)
+            colMembers.push({
+              key,
+              label: colDims.map(dimension => {
+                const cell = row[dimension.key] || {}
+                return cell.label || cell.id || ''
+              }).join(' / ')
+            })
+          }
+        })
+      } else {
+        colMembers.push({ key: '', label: '' })
+      }
+      const seenRows = new Set()
+      const rowTuples = []
+      data.forEach(row => {
+        const key = rowKey(row, rowDims)
+        if (!seenRows.has(key)) {
+          seenRows.add(key)
+          rowTuples.push(row)
+        }
       })
-      measures.forEach(measure => {
-        table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
-      })
-      table += '</tr></thead><tbody>'
+      const findCellRow = (rowTuple, colKey) => {
+        if (!colDims.length) {
+          return rowTuple
+        }
+        const rKey = rowKey(rowTuple, rowDims)
+        return data.find(row => rowKey(row, rowDims) === rKey && colDims.map(dimension => (row[dimension.key] && row[dimension.key].id) || '').join('|') === colKey) || {}
+      }
 
-      data.forEach((row, rowIndex) => {
+      const totals = colMembers.map(() => measures.map(() => 0))
+      let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
+      if (colDims.length) {
         table += '<tr>'
-        dimensions.forEach(dimension => {
+        rowDims.forEach(dimension => {
+          table += `<th rowspan="2" style="${cellChrome};text-align:${hAlign}">${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
+        })
+        if (!rowDims.length) {
+          table += `<th rowspan="2" style="${cellChrome}"></th>`
+        }
+        colMembers.forEach(member => {
+          table += `<th class="group" colspan="${measures.length}" style="${cellChrome};text-align:center">${this._escape(member.label)}</th>`
+        })
+        table += '</tr><tr>'
+        colMembers.forEach(() => {
+          measures.forEach(measure => {
+            table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+          })
+        })
+        table += '</tr>'
+      } else {
+        table += '<tr>'
+        rowDims.forEach(dimension => {
+          table += `<th style="${cellChrome};text-align:${hAlign}">${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
+        })
+        measures.forEach(measure => {
+          table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+        })
+        table += '</tr>'
+      }
+      table += '</thead><tbody>'
+
+      rowTuples.forEach((row, rowIndex) => {
+        table += '<tr>'
+        rowDims.forEach(dimension => {
           const cell = row[dimension.key] || {}
           const dimRule = firstMatchingRule(rules, 'dimension')
           table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${this._escape(cell.label || '')}</td>`
         })
-        measures.forEach((measure, measureIndex) => {
-          const bound = row[measure.key] || {}
-          const original = bound.raw
-          const key = changeKey(row, dimensions, measure.key)
-          const pending = this._pending.get(key)
-          const current = pending ? pending.value : original
-          if (typeof current === 'number' && !Number.isNaN(current)) {
-            totals[measureIndex] += current
-          }
-          const isChanged = !!pending
-          const display = formatNumber(current, formatOpts, bound.formatted)
-          const unit = bound.unit ? ` title="${this._escape(bound.unit)}"` : ''
-          const measureKind = editable ? 'editable' : 'readonly-account'
-          const measureRule = firstMatchingRule(rules, measureKind)
-          const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
-          if (editable) {
-            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
-            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" />`
-            table += '</td>'
-          } else {
-            table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
-          }
+        if (!rowDims.length) {
+          table += `<td class="dim" style="${cellChrome}"></td>`
+        }
+        colMembers.forEach((member, colIndex) => {
+          const source = findCellRow(row, member.key)
+          measures.forEach((measure, measureIndex) => {
+            const bound = source[measure.key] || {}
+            const original = bound.raw
+            const key = changeKey(row, rowDims, measure.key) + '||' + member.key
+            const pending = this._pending.get(key)
+            const current = pending ? pending.value : original
+            if (typeof current === 'number' && !Number.isNaN(current)) {
+              totals[colIndex][measureIndex] += current
+            }
+            const isChanged = !!pending
+            const display = formatNumber(current, formatOpts, bound.formatted)
+            const unit = bound.unit ? ` title="${this._escape(bound.unit)}"` : ''
+            const measureKind = editable ? 'editable' : 'readonly-account'
+            const measureRule = firstMatchingRule(rules, measureKind)
+            const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
+            if (editable) {
+              table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" data-col="${this._escape(member.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
+              table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" data-col="${this._escape(member.key)}" />`
+              table += '</td>'
+            } else {
+              table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
+            }
+          })
         })
         table += '</tr>'
       })
@@ -514,9 +684,11 @@
 
       if (this.showTotals !== false) {
         table += '<tfoot><tr>'
-        table += `<td colspan="${dimensions.length}" style="${cellChrome};text-align:${hAlign}">Total</td>`
-        totals.forEach(total => {
-          table += `<td class="measure" style="${cellChrome};text-align:right">${this._escape(formatNumber(total, formatOpts))}</td>`
+        table += `<td colspan="${Math.max(rowDims.length, 1)}" style="${cellChrome};text-align:${hAlign}">Total</td>`
+        colMembers.forEach((member, colIndex) => {
+          totals[colIndex].forEach(total => {
+            table += `<td class="measure" style="${cellChrome};text-align:right">${this._escape(formatNumber(total, formatOpts))}</td>`
+          })
         })
         table += '</tr></tfoot>'
       }
@@ -536,7 +708,7 @@
         })
         input.addEventListener('blur', () => {
           this._editing = false
-          this._commitInput(input, data, dimensions, measures, decimalPlaces)
+          this._commitInput(input, rowTuples, rowDims, measures, decimalPlaces, data, colDims)
         })
         input.addEventListener('keydown', event => {
           if (event.key === 'Enter') {
@@ -553,18 +725,24 @@
       this._renderToolbar()
     }
 
-    _commitInput (input, data, dimensions, measures, decimalPlaces) {
+    _commitInput (input, rowTuples, rowDims, measures, decimalPlaces, data, colDims) {
       const rowIndex = Number(input.getAttribute('data-row'))
       const measureKey = input.getAttribute('data-measure')
-      const row = data[rowIndex]
+      const colKey = input.getAttribute('data-col') || ''
+      const row = rowTuples[rowIndex]
       const measure = measures.find(item => item.key === measureKey)
       if (!row || !measure) {
         return
       }
-      const bound = row[measure.key] || {}
+      let source = row
+      if (colDims && colDims.length) {
+        const rKey = rowKey(row, rowDims)
+        source = data.find(item => rowKey(item, rowDims) === rKey && colDims.map(dimension => (item[dimension.key] && item[dimension.key].id) || '').join('|') === colKey) || row
+      }
+      const bound = source[measure.key] || {}
       const original = bound.raw
       const parsed = parseInputNumber(input.value)
-      const key = changeKey(row, dimensions, measure.key)
+      const key = changeKey(row, rowDims, measure.key) + '||' + colKey
 
       if (parsed === null) {
         this._pending.delete(key)
@@ -579,7 +757,7 @@
         return
       }
 
-      const change = toPlanningChange(row, dimensions, measure, original, parsed)
+      const change = toPlanningChange(source, rowDims.concat(colDims || []), measure, original, parsed)
       this._pending.set(key, { value: parsed, change })
       this._lastChange = change
       this.render()
@@ -613,5 +791,7 @@
     }
   }
 
-  customElements.define('com-sap-sac-sample-planning-table', PlanningTable)
+  if (!customElements.get('com-sap-sac-sample-planning-table')) {
+    customElements.define('com-sap-sac-sample-planning-table', PlanningTable)
+  }
 })()

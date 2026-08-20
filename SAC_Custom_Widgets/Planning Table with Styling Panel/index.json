@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,15 +15,22 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-+KVDYfdDqn8+hw6kiFAIKO4/d1KLiqbrHzI2b0dcNMI=",
-      "ignoreIntegrity": false
+      "integrity": "sha256-U1CPi3zoOScZP2FoMlr9zlzCZdGQeQ29cnUfQxHPJsc=",
+      "ignoreIntegrity": true
+    },
+    {
+      "kind": "builder",
+      "tag": "com-sap-sac-sample-planning-table-builder",
+      "url": "/builder.js",
+      "integrity": "sha256-Z3uvAUkjOFO48TkLqwCWjznxWmnco/aUHSy6ZhzucLY=",
+      "ignoreIntegrity": true
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling",
       "url": "/styling.js",
       "integrity": "sha256-QlGKSXQxxIDHVH2yfjbTxBiEwcCN+eEGQOvfoB+dA34=",
-      "ignoreIntegrity": false
+      "ignoreIntegrity": true
     }
   ],
   "properties": {
@@ -169,6 +176,21 @@
       "type": "boolean",
       "default": true,
       "description": "Show Submit and Revert actions"
+    },
+    "builderCommand": {
+      "type": "string",
+      "default": "",
+      "description": "Internal feed change command from the Builder panel"
+    },
+    "availableDimensionsJson": {
+      "type": "string",
+      "default": "[]",
+      "description": "JSON list of model dimensions for the Builder picker"
+    },
+    "availableMeasuresJson": {
+      "type": "string",
+      "default": "[]",
+      "description": "JSON list of model measures for the Builder picker"
     }
   },
   "methods": {
@@ -265,12 +287,17 @@
       "feeds": [
         {
           "id": "dimensions",
-          "description": "Row dimensions",
+          "description": "Rows",
+          "type": "dimension"
+        },
+        {
+          "id": "columns",
+          "description": "Columns",
           "type": "dimension"
         },
         {
           "id": "measures",
-          "description": "Editable measures or accounts",
+          "description": "Measures",
           "type": "mainStructureMember"
         }
       ]
