@@ -30,13 +30,15 @@ The ZIP must keep `main.js` and `styling.js` at the archive root. Those names ma
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.2.1** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.2.2** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 
-- **Rows** — dimensions
-- **Columns** — additional dimensions (shown above measures in the table)
+- **Rows** — dimensions such as ARE
+- **Columns** — extra dimensions (column headers)
 - **Measures** — measures or accounts
+
+If **+ Add Dimension** on Columns does not keep Date or Version, add those dimensions in **Rows**. With Column dimensions = **Auto** (default), the table still uses Version and Date as column headers (Actual, (all), and so on), like a native planning table.
 
 Drag items from the left-side list, or use **+ Add Dimension** / **+ Add Measure** on each well.
 

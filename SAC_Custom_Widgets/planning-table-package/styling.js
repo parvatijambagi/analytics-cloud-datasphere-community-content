@@ -218,6 +218,12 @@
       </div>
 
       <h3>Table</h3>
+      <label for="columnDimension">Column dimensions</label>
+      <select id="columnDimension">
+        <option value="Auto">Auto (Version and Date)</option>
+        <option value="None">None (all dimensions on rows)</option>
+      </select>
+      <p class="hint">If the Builder Columns well does not keep a dimension, add Version and Date in Rows. Auto still places them on columns, like the native table.</p>
       <label for="headerBackground">Header background</label>
       <input id="headerBackground" type="text" placeholder="#0854A0" />
       <label for="headerTextColor">Header text color</label>
@@ -350,6 +356,7 @@
             headerBackground: this._val('headerBackground'),
             headerTextColor: this._val('headerTextColor'),
             changedCellColor: this._val('changedCellColor'),
+            columnDimension: this._val('columnDimension'),
             showTotals: this._shadowRoot.getElementById('showTotals').checked,
             showToolbar: this._shadowRoot.getElementById('showToolbar').checked,
             readOnly: this._shadowRoot.getElementById('readOnly').checked
@@ -404,6 +411,7 @@
       assign('headerBackground', changedProps.headerBackground)
       assign('headerTextColor', changedProps.headerTextColor)
       assign('changedCellColor', changedProps.changedCellColor)
+      assign('columnDimension', changedProps.columnDimension)
       assign('showTotals', changedProps.showTotals)
       assign('showToolbar', changedProps.showToolbar)
       assign('readOnly', changedProps.readOnly)

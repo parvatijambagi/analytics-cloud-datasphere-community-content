@@ -45,9 +45,17 @@
     }) || null
   }
 
-  const pickColumnDimensions = (dimensions, metadata) => {
+  const dimName = dimension => String(dimension.description || dimension.label || dimension.id || dimension.key || '')
+
+  const isVersionDim = dimension => /version/.test(dimName(dimension).toLowerCase())
+  const isDateDim = dimension => /date|time|month|period|year|calmonth|fiscal/.test(dimName(dimension).toLowerCase())
+
+  const pickColumnDimensions = (dimensions, metadata, columnDimension) => {
+    if (!dimensions || !dimensions.length) {
+      return []
+    }
     const feeds = (metadata && metadata.feeds) || {}
-    let tokens = collectFeedValues(feeds, ['columns', 'series', 'column', 'columnDimensions'])
+    let tokens = collectFeedValues(feeds, ['columns', 'series', 'column', 'columnDimensions', 'color'])
     if (!tokens.length) {
       Object.keys(feeds).forEach(name => {
         if (name === 'dimensions' || name === 'rows' || name === 'measures') {
@@ -63,7 +71,20 @@
         }
       })
     }
-    return tokens.map(token => matchDimension(dimensions, token)).filter(Boolean)
+    const fromFeed = tokens.map(token => matchDimension(dimensions, token)).filter(Boolean)
+    if (fromFeed.length) {
+      return fromFeed
+    }
+    const requested = String(columnDimension || 'Auto').trim()
+    if (!requested || requested === 'None') {
+      return []
+    }
+    if (requested !== 'Auto') {
+      return requested.split(',').map(part => matchDimension(dimensions, part.trim())).filter(Boolean)
+    }
+    const auto = dimensions.filter(dimension => isVersionDim(dimension) || isDateDim(dimension))
+    auto.sort((a, b) => (isVersionDim(a) ? 0 : 1) - (isVersionDim(b) ? 0 : 1))
+    return auto
   }
 
   const pickRowDimensions = (dimensions, metadata, colDims) => {
@@ -86,8 +107,9 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add at least one dimension to <em>Rows</em>.</li>
-          <li>Add measures or accounts to <em>Measures</em>. Add column dimensions to <em>Columns</em> if needed.</li>
+          <li>Add row dimensions such as ARE to <em>Rows</em>.</li>
+          <li>Add <em>Version</em> and <em>Date</em> in Builder (Rows or Columns). They are placed on columns automatically, like a native planning table.</li>
+          <li>Add measures such as Global Currency and Local Currency to <em>Measures</em>.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
         </ol>
         ${extra ? `<p>${extra}</p>` : ''}
@@ -471,7 +493,7 @@
       const data = dataBinding && dataBinding.data
       const metadata = dataBinding && dataBinding.metadata
       const { dimensions, measures } = parseMetadata(metadata)
-      const colDims = pickColumnDimensions(dimensions, metadata)
+      const colDims = pickColumnDimensions(dimensions, metadata, this.columnDimension)
       const rowDims = pickRowDimensions(dimensions, metadata, colDims)
       const hasFeeds = (rowDims.length > 0 || colDims.length > 0) && measures.length > 0
 
