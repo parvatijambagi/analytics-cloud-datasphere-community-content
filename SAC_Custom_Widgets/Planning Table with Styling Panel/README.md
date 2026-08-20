@@ -26,13 +26,13 @@ This is the SAC resource-upload flow. You do not host the JavaScript files yours
 4. Confirm the widget **Planning Table** appears in the list.
 5. Open or create an **Optimized Story**, insert **Planning Table**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
 
-The ZIP must keep `main.js` and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/styling.js`).
+The ZIP must keep `main.js`, `builder.js`, and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/builder.js`, `/styling.js`).
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.1.1** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.1.2** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
-The Builder panel has **Rows** (dimensions) and **Columns** (a nested Measures group plus optional column dimensions).
+The Builder panel keeps the native **Rows** / **Columns** structure: Rows hold dimensions; Columns hold a nested **Measures** group plus optional column dimensions. Click **+ Add Dimension** or **+ Add Measure** to open the picker. The ZIP must include `builder.js` as well as `main.js` and `styling.js`.
 
 ## If the widget says data binding failed
 

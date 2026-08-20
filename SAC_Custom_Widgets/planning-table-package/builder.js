@@ -8,6 +8,7 @@
         color: #32363a;
         background: #f7f7f7;
         padding: 0 0 8px;
+        position: relative;
       }
       .section + .section {
         border-top: 1px solid #e5e5e5;
@@ -93,18 +94,50 @@
         padding: 4px 2px 6px;
       }
       .measures-h .label { flex: 1; }
-      .picker {
+      .overlay {
         display: none;
-        margin: 4px 0 8px;
+        position: absolute;
+        z-index: 20;
+        left: 8px;
+        right: 8px;
+        background: #fff;
+        border: 1px solid #d9d9d9;
+        border-radius: 4px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.16);
+        padding: 8px;
       }
-      .picker.open { display: block; }
-      select {
+      .overlay.open { display: block; }
+      .overlay input {
         width: 100%;
+        box-sizing: border-box;
         height: 28px;
         border: 1px solid #d9d9d9;
         border-radius: 4px;
+        padding: 0 8px;
         font: inherit;
-        background: #fff;
+        margin-bottom: 6px;
+      }
+      .overlay .list {
+        max-height: 220px;
+        overflow: auto;
+      }
+      .overlay .opt {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        border: 0;
+        background: none;
+        text-align: left;
+        font: inherit;
+        padding: 7px 6px;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .overlay .opt:hover { background: #e8f4fd; }
+      .overlay .empty {
+        color: #6a6d70;
+        padding: 10px 6px;
       }
       svg.ic {
         width: 16px;
@@ -121,6 +154,10 @@
       <div class="section">
         <div class="section-h" data-toggle="columns-body"><span class="chevron">▼</span> Columns<span class="spacer"></span><span class="menu">···</span></div>
         <div class="body" id="columns-body"></div>
+      </div>
+      <div class="overlay" id="picker">
+        <input id="picker-search" type="text" placeholder="Search" />
+        <div class="list" id="picker-list"></div>
       </div>
     </div>
   `
@@ -140,6 +177,9 @@
       this._measures = []
       this._allDimensions = []
       this._allMeasures = []
+      this._pickerKind = ''
+      this._pickerFeed = ''
+      this._requestedCatalog = false
       this._shadowRoot.querySelectorAll('[data-toggle]').forEach(el => {
         el.addEventListener('click', () => {
           const body = this._shadowRoot.getElementById(el.getAttribute('data-toggle'))
@@ -148,32 +188,79 @@
           el.querySelector('.chevron').textContent = hidden ? '▼' : '▶'
         })
       })
+      const overlay = this._shadowRoot.getElementById('picker')
+      const search = this._shadowRoot.getElementById('picker-search')
+      search.addEventListener('input', () => this._fillPicker(search.value))
+      overlay.addEventListener('click', event => event.stopPropagation())
+      this._shadowRoot.addEventListener('click', event => {
+        if (!overlay.contains(event.target) && !event.target.closest('.link')) {
+          this._closePicker()
+        }
+      })
     }
 
     onCustomWidgetAfterUpdate (changedProps) {
       const binding = (changedProps && changedProps.dataBinding) || this.dataBinding
       this._syncFromBinding(binding)
-      this._applyCatalog(
+      this._mergeCatalog(
         (changedProps && changedProps.availableDimensionsJson) || this.availableDimensionsJson,
         (changedProps && changedProps.availableMeasuresJson) || this.availableMeasuresJson
       )
       this._loadCatalog()
+      if (!this._allDimensions.length && !this._requestedCatalog) {
+        this._requestedCatalog = true
+        this._send('requestCatalog', '', 'catalog')
+      }
+      if (this._allDimensions.length) {
+        this._requestedCatalog = false
+      }
       this._render()
+      if (this._pickerKind) {
+        this._fillPicker(this._shadowRoot.getElementById('picker-search').value)
+      }
     }
 
-    _applyCatalog (dimJson, measJson) {
-      try {
-        const dims = JSON.parse(dimJson || '[]')
-        if (Array.isArray(dims) && dims.length) {
-          this._allDimensions = dims.map(id => typeof id === 'string' ? { key: id, id, name: id } : { key: id.id || id.key, id: id.id || id.key, name: id.name || id.description || id.id || id.key })
+    _item (raw) {
+      if (raw == null) {
+        return null
+      }
+      if (typeof raw === 'string') {
+        return { key: raw, id: raw, name: raw }
+      }
+      const id = String(raw.id || raw.key || raw.dimensionId || raw.name || '').trim()
+      if (!id) {
+        return null
+      }
+      return {
+        key: id,
+        id,
+        name: String(raw.description || raw.label || raw.name || id)
+      }
+    }
+
+    _mergeItems (target, list) {
+      const seen = new Set(target.map(item => item.id))
+      ;(list || []).forEach(raw => {
+        const item = this._item(raw)
+        if (item && !seen.has(item.id)) {
+          seen.add(item.id)
+          target.push(item)
         }
-      } catch (ignore) {}
+      })
+    }
+
+    _parseJsonList (text) {
       try {
-        const measures = JSON.parse(measJson || '[]')
-        if (Array.isArray(measures) && measures.length) {
-          this._allMeasures = measures.map(id => typeof id === 'string' ? { key: id, id, name: id } : { key: id.id || id.key, id: id.id || id.key, name: id.label || id.name || id.id || id.key })
-        }
-      } catch (ignore) {}
+        const parsed = JSON.parse(text || '[]')
+        return Array.isArray(parsed) ? parsed : []
+      } catch (ignore) {
+        return []
+      }
+    }
+
+    _mergeCatalog (dimJson, measJson) {
+      this._mergeItems(this._allDimensions, this._parseJsonList(dimJson))
+      this._mergeItems(this._allMeasures, this._parseJsonList(measJson))
     }
 
     _syncFromBinding (binding) {
@@ -185,19 +272,26 @@
       const measures = metadata.mainStructureMembers || metadata.measures || metadata.accounts || {}
       const feeds = metadata.feeds || {}
       const keys = (feed) => (feeds[feed] && feeds[feed].values) || []
-      const dimItem = key => ({
+      const dimItem = key => this._item({
         key,
         id: (dims[key] && dims[key].id) || key,
         name: (dims[key] && (dims[key].description || dims[key].label || dims[key].id)) || key
       })
-      this._rows = keys('dimensions').concat(keys('rows')).map(dimItem)
-      this._columns = keys('columns').map(dimItem)
-      this._measures = keys('measures').map(key => ({
+      const colKeys = keys('columns')
+      const rowKeys = keys('dimensions').concat(keys('rows')).filter(key => colKeys.indexOf(key) === -1)
+      this._rows = rowKeys.map(dimItem).filter(Boolean)
+      this._columns = colKeys.map(dimItem).filter(Boolean)
+      this._measures = keys('measures').map(key => this._item({
         key,
         id: (measures[key] && measures[key].id) || key,
         name: (measures[key] && (measures[key].label || measures[key].description || measures[key].id)) || key
-      }))
-      this._allDimensions = Object.keys(dims).map(dimItem)
+      })).filter(Boolean)
+      this._mergeItems(this._allDimensions, Object.keys(dims).map(dimItem))
+      this._mergeItems(this._allMeasures, Object.keys(measures).map(key => this._item({
+        key,
+        id: (measures[key] && measures[key].id) || key,
+        name: (measures[key] && (measures[key].label || measures[key].description || measures[key].id)) || key
+      })))
     }
 
     _binding () {
@@ -209,41 +303,71 @@
       return null
     }
 
+    _toArray (value) {
+      if (!value) {
+        return []
+      }
+      if (Array.isArray(value)) {
+        return value
+      }
+      if (typeof value === 'object' && typeof value.then !== 'function') {
+        return Object.keys(value).map(key => Object.assign({ id: key, key }, value[key]))
+      }
+      return []
+    }
+
     _loadCatalog () {
       try {
         const binding = this._binding()
         const ds = binding && binding.getDataSource && binding.getDataSource()
         if (ds && ds.getDimensions) {
-          const ids = [].concat(ds.getDimensions() || [])
-          if (ids.length) {
-            this._allDimensions = ids.map(id => ({ key: id, id, name: id }))
+          const result = ds.getDimensions()
+          if (result && typeof result.then === 'function') {
+            result.then(resolved => {
+              this._mergeItems(this._allDimensions, this._toArray(resolved))
+              this._render()
+            }).catch(() => {})
+          } else {
+            this._mergeItems(this._allDimensions, this._toArray(result))
           }
         }
         if (ds && ds.getMeasures) {
-          this._allMeasures = [].concat(ds.getMeasures() || []).map(id => ({ key: id, id, name: id }))
+          const result = ds.getMeasures()
+          if (result && typeof result.then === 'function') {
+            result.then(resolved => {
+              this._mergeItems(this._allMeasures, this._toArray(resolved))
+              this._render()
+            }).catch(() => {})
+          } else {
+            this._mergeItems(this._allMeasures, this._toArray(result))
+          }
         }
       } catch (ignore) {}
     }
 
     _usedDimensionIds () {
-      return this._rows.concat(this._columns).map(item => item.id || item.name || item.key)
+      return this._rows.concat(this._columns).map(item => item.id)
+    }
+
+    _usedMeasureIds () {
+      return this._measures.map(item => item.id)
     }
 
     _availableDimensions () {
       const used = this._usedDimensionIds()
-      const list = this._allDimensions.filter(item => used.indexOf(item.id) === -1 && used.indexOf(item.name) === -1 && used.indexOf(item.key) === -1)
-      return list.length ? list : this._allDimensions
+      return this._allDimensions.filter(item => used.indexOf(item.id) === -1)
+    }
+
+    _availableMeasures () {
+      const used = this._usedMeasureIds()
+      return this._allMeasures.filter(item => used.indexOf(item.id) === -1)
     }
 
     _send (op, feed, id) {
-      const value = (id || '').trim()
-      if (!value) {
-        return
-      }
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: {
           properties: {
-            builderCommand: JSON.stringify({ op, feed, id: value, t: Date.now() })
+            builderCommand: JSON.stringify({ op, feed, id: id || '', t: Date.now() })
           }
         }
       }))
@@ -265,24 +389,60 @@
       }
     }
 
-    _openPicker (pickerId, selectId, kind, feedId) {
-      const picker = this._shadowRoot.getElementById(pickerId)
-      const select = this._shadowRoot.getElementById(selectId)
-      const options = kind === 'measure' ? this._allMeasures : this._availableDimensions()
-      select.innerHTML = '<option value="">Select ' + (kind === 'measure' ? 'measure' : 'dimension') + '</option>'
-      options.forEach(item => {
-        const opt = document.createElement('option')
-        opt.value = item.id || item.key
-        opt.textContent = item.name || item.id || item.key
-        select.appendChild(opt)
-      })
-      picker.classList.add('open')
-      select.focus()
-      select.onchange = () => {
-        const id = select.value
-        picker.classList.remove('open')
-        this._assign(kind, feedId, id)
+    _openPicker (kind, feedId, anchor) {
+      this._pickerKind = kind
+      this._pickerFeed = feedId
+      const overlay = this._shadowRoot.getElementById('picker')
+      const search = this._shadowRoot.getElementById('picker-search')
+      search.value = ''
+      search.placeholder = kind === 'measure' ? 'Search measures' : 'Search dimensions'
+      const root = this._shadowRoot.getElementById('root')
+      const top = anchor ? (anchor.offsetTop + anchor.offsetHeight + 4) : 40
+      overlay.style.top = top + 'px'
+      overlay.classList.add('open')
+      this._fillPicker('')
+      search.focus()
+      if (!this._allDimensions.length || (kind === 'measure' && !this._allMeasures.length)) {
+        this._send('requestCatalog', '', 'catalog')
       }
+    }
+
+    _closePicker () {
+      this._pickerKind = ''
+      this._pickerFeed = ''
+      this._shadowRoot.getElementById('picker').classList.remove('open')
+    }
+
+    _fillPicker (query) {
+      const list = this._shadowRoot.getElementById('picker-list')
+      const kind = this._pickerKind
+      const feed = this._pickerFeed
+      const options = kind === 'measure' ? this._availableMeasures() : this._availableDimensions()
+      const q = String(query || '').toLowerCase()
+      const filtered = options.filter(item => {
+        const label = (item.name || '') + ' ' + (item.id || '')
+        return !q || label.toLowerCase().indexOf(q) !== -1
+      })
+      if (!filtered.length) {
+        const empty = !this._allDimensions.length && kind !== 'measure'
+          ? 'No dimensions are available yet. Bind a model on the widget, then try Add Dimension again.'
+          : (kind === 'measure' && !this._allMeasures.length
+            ? 'No measures are available yet. Bind a model on the widget, then try Add Measure again.'
+            : 'No unused ' + (kind === 'measure' ? 'measures' : 'dimensions') + ' to add.')
+        list.innerHTML = '<div class="empty">' + empty + '</div>'
+        return
+      }
+      list.innerHTML = filtered.map(item =>
+        '<button class="opt" data-id="' + this._esc(item.id) + '">' + this._esc(item.name) + '</button>'
+      ).join('')
+      list.querySelectorAll('.opt').forEach(btn => {
+        btn.addEventListener('click', event => {
+          event.preventDefault()
+          const id = btn.getAttribute('data-id')
+          this._closePicker()
+          this._assign(kind, feed, id)
+        })
+      })
     }
 
     _chip (item, feedId, icon, extras) {
@@ -298,8 +458,7 @@
         ? this._rows.map(item => this._chip(item, 'dimensions', clover, true)).join('')
         : ''
       rows.innerHTML = rowChips +
-        '<button class="link" id="add-row-dim">' + plus + ' Add Dimension</button>' +
-        '<div class="picker" id="pick-row-dim"><select id="select-row-dim"></select></div>'
+        '<button class="link" id="add-row-dim">' + plus + ' Add Dimension</button>'
 
       const col = this._shadowRoot.getElementById('columns-body')
       const measureChips = this._measures.map(item => this._chip(item, 'measures', ruler, false)).join('')
@@ -311,24 +470,23 @@
           '<button class="x" id="remove-measures" title="Remove Measures">×</button></div>' +
           measureChips +
           '<button class="link" id="add-measure">' + plus + ' Add Measure</button>' +
-          '<div class="picker" id="pick-measure"><select id="select-measure"></select></div>' +
         '</div>' +
         columnChips +
-        '<button class="link" id="add-col-dim">' + plus + ' Add Dimension</button>' +
-        '<div class="picker" id="pick-col-dim"><select id="select-col-dim"></select></div>'
+        '<button class="link" id="add-col-dim">' + plus + ' Add Dimension</button>'
 
       const on = (id, fn) => {
         const el = this._shadowRoot.getElementById(id)
         if (el) {
           el.addEventListener('click', event => {
             event.preventDefault()
-            fn()
+            event.stopPropagation()
+            fn(el)
           })
         }
       }
-      on('add-row-dim', () => this._openPicker('pick-row-dim', 'select-row-dim', 'dimension', 'dimensions'))
-      on('add-col-dim', () => this._openPicker('pick-col-dim', 'select-col-dim', 'dimension', 'columns'))
-      on('add-measure', () => this._openPicker('pick-measure', 'select-measure', 'measure', 'measures'))
+      on('add-row-dim', el => this._openPicker('dimension', 'dimensions', el))
+      on('add-col-dim', el => this._openPicker('dimension', 'columns', el))
+      on('add-measure', el => this._openPicker('measure', 'measures', el))
       on('remove-measures', () => this._clearMeasures())
       this._shadowRoot.querySelectorAll('.x[data-feed]').forEach(btn => {
         btn.addEventListener('click', event => {

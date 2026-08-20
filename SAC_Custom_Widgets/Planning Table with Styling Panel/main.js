@@ -342,8 +342,9 @@
       }
       if (changedProps && changedProps.builderCommand) {
         this._runBuilderCommand(changedProps.builderCommand)
+      } else {
+        this._publishCatalog()
       }
-      this._publishCatalog()
       if (!this._editing) {
         this.render()
       }
@@ -406,27 +407,105 @@
       return null
     }
 
-    _publishCatalog () {
-      const binding = this._feedBinding()
+    async _asList (value) {
+      try {
+        const resolved = await Promise.resolve(value)
+        if (!resolved) {
+          return []
+        }
+        if (Array.isArray(resolved)) {
+          return resolved
+        }
+        if (typeof resolved === 'string') {
+          return [resolved]
+        }
+        if (typeof resolved === 'object') {
+          return Object.keys(resolved).map(key => Object.assign({ id: key, key }, resolved[key]))
+        }
+      } catch (ignore) {}
+      return []
+    }
+
+    _catalogItem (raw) {
+      if (raw == null) {
+        return null
+      }
+      if (typeof raw === 'string') {
+        return { id: raw, name: raw }
+      }
+      const id = String(raw.id || raw.key || raw.dimensionId || raw.name || '').trim()
+      if (!id) {
+        return null
+      }
+      return { id, name: String(raw.description || raw.label || raw.name || id) }
+    }
+
+    _uniqueCatalog (list) {
+      const seen = new Set()
+      const out = []
+      ;(list || []).forEach(raw => {
+        const item = this._catalogItem(raw)
+        if (item && !seen.has(item.id)) {
+          seen.add(item.id)
+          out.push(item)
+        }
+      })
+      return out
+    }
+
+    async _publishCatalog () {
+      if (this._publishingCatalog) {
+        return
+      }
+      this._publishingCatalog = true
+      const binding = this._feedBinding() || this._resolveDataBinding()
       let dims = []
       let measures = []
       try {
         const ds = binding && binding.getDataSource && binding.getDataSource()
-        if (ds && ds.getDimensions) {
-          dims = [].concat(ds.getDimensions() || [])
-        }
-        if (ds && ds.getMeasures) {
-          measures = [].concat(ds.getMeasures() || [])
+        if (ds) {
+          if (ds.getDimensions) {
+            dims = dims.concat(await this._asList(ds.getDimensions()))
+          }
+          if (ds.getDimensionIds) {
+            dims = dims.concat(await this._asList(ds.getDimensionIds()))
+          }
+          if (ds.getMeasures) {
+            measures = measures.concat(await this._asList(ds.getMeasures()))
+          }
+          if (ds.getMeasureIds) {
+            measures = measures.concat(await this._asList(ds.getMeasureIds()))
+          }
         }
       } catch (ignore) {}
-      const dimJson = JSON.stringify(dims)
-      const measJson = JSON.stringify(measures)
-      if (dimJson === this.availableDimensionsJson && measJson === this.availableMeasuresJson) {
+      try {
+        const metadata = binding && binding.metadata
+        if (metadata && metadata.dimensions) {
+          dims = dims.concat(Object.keys(metadata.dimensions).map(key => Object.assign({ id: key, key }, metadata.dimensions[key])))
+        }
+        const measureMap = metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)
+        if (measureMap) {
+          measures = measures.concat(Object.keys(measureMap).map(key => Object.assign({ id: key, key }, measureMap[key])))
+        }
+      } catch (ignore) {}
+      const dimItems = this._uniqueCatalog(dims)
+      const measureItems = this._uniqueCatalog(measures)
+      const dimJson = JSON.stringify(dimItems)
+      const measJson = JSON.stringify(measureItems)
+      const previousDims = this.availableDimensionsJson || '[]'
+      const previousMeas = this.availableMeasuresJson || '[]'
+      if (!dimItems.length && previousDims !== '[]') {
+        this._publishingCatalog = false
+        return
+      }
+      if (dimJson === previousDims && measJson === previousMeas) {
+        this._publishingCatalog = false
         return
       }
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: { properties: { availableDimensionsJson: dimJson, availableMeasuresJson: measJson } }
       }))
+      this._publishingCatalog = false
     }
 
     async _runBuilderCommand (raw) {
@@ -439,7 +518,17 @@
       } catch (ignore) {
         return
       }
-      if (!cmd || !cmd.op || cmd.op === 'noop' || !cmd.id) {
+      if (!cmd || !cmd.op || cmd.op === 'noop') {
+        return
+      }
+      if (cmd.op === 'requestCatalog') {
+        await this._publishCatalog()
+        this.dispatchEvent(new CustomEvent('propertiesChanged', {
+          detail: { properties: { builderCommand: '{"op":"noop"}' } }
+        }))
+        return
+      }
+      if (!cmd.id) {
         return
       }
       const binding = this._feedBinding()
@@ -488,6 +577,7 @@
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: { properties: { builderCommand: '{"op":"noop"}' } }
       }))
+      this._publishCatalog()
     }
 
     render () {
