@@ -27,8 +27,8 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add dimensions to <em>Rows</em>.</li>
-          <li>Add measures under <em>Columns → Measures</em>. Add column dimensions under <em>Columns</em> if needed.</li>
+          <li>Add at least one dimension to <em>Rows</em>.</li>
+          <li>Add measures or accounts to <em>Measures</em>. Add column dimensions to <em>Columns</em> if needed.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
         </ol>
         ${extra ? `<p>${extra}</p>` : ''}
@@ -340,11 +340,6 @@
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
       }
-      if (changedProps && changedProps.builderCommand) {
-        this._runBuilderCommand(changedProps.builderCommand)
-      } else {
-        this._publishCatalog()
-      }
       if (!this._editing) {
         this.render()
       }
@@ -396,189 +391,6 @@
         }
       } catch (ignore) {}
       return this._props && this._props.dataBinding
-    }
-
-    _feedBinding () {
-      try {
-        if (this.dataBindings && this.dataBindings.getDataBinding) {
-          return this.dataBindings.getDataBinding('dataBinding')
-        }
-      } catch (ignore) {}
-      return null
-    }
-
-    async _asList (value) {
-      try {
-        const resolved = await Promise.resolve(value)
-        if (!resolved) {
-          return []
-        }
-        if (Array.isArray(resolved)) {
-          return resolved
-        }
-        if (typeof resolved === 'string') {
-          return [resolved]
-        }
-        if (typeof resolved === 'object') {
-          return Object.keys(resolved).map(key => Object.assign({ id: key, key }, resolved[key]))
-        }
-      } catch (ignore) {}
-      return []
-    }
-
-    _catalogItem (raw) {
-      if (raw == null) {
-        return null
-      }
-      if (typeof raw === 'string') {
-        return { id: raw, name: raw }
-      }
-      const id = String(raw.id || raw.key || raw.dimensionId || raw.name || '').trim()
-      if (!id) {
-        return null
-      }
-      return { id, name: String(raw.description || raw.label || raw.name || id) }
-    }
-
-    _uniqueCatalog (list) {
-      const seen = new Set()
-      const out = []
-      ;(list || []).forEach(raw => {
-        const item = this._catalogItem(raw)
-        if (item && !seen.has(item.id)) {
-          seen.add(item.id)
-          out.push(item)
-        }
-      })
-      return out
-    }
-
-    async _publishCatalog () {
-      if (this._publishingCatalog) {
-        return
-      }
-      this._publishingCatalog = true
-      const binding = this._feedBinding() || this._resolveDataBinding()
-      let dims = []
-      let measures = []
-      try {
-        const ds = binding && binding.getDataSource && binding.getDataSource()
-        if (ds) {
-          if (ds.getDimensions) {
-            dims = dims.concat(await this._asList(ds.getDimensions()))
-          }
-          if (ds.getDimensionIds) {
-            dims = dims.concat(await this._asList(ds.getDimensionIds()))
-          }
-          if (ds.getMeasures) {
-            measures = measures.concat(await this._asList(ds.getMeasures()))
-          }
-          if (ds.getMeasureIds) {
-            measures = measures.concat(await this._asList(ds.getMeasureIds()))
-          }
-          if (ds.getMainStructureMembers) {
-            measures = measures.concat(await this._asList(ds.getMainStructureMembers()))
-          }
-          if (ds.getAccounts) {
-            measures = measures.concat(await this._asList(ds.getAccounts()))
-          }
-        }
-        if (binding && binding.getMembers) {
-          measures = measures.concat(await this._asList(binding.getMembers()))
-        }
-      } catch (ignore) {}
-      try {
-        const metadata = binding && binding.metadata
-        if (metadata && metadata.dimensions) {
-          dims = dims.concat(Object.keys(metadata.dimensions).map(key => Object.assign({ id: key, key }, metadata.dimensions[key])))
-        }
-        const measureMap = metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)
-        if (measureMap) {
-          measures = measures.concat(Object.keys(measureMap).map(key => Object.assign({ id: key, key }, measureMap[key])))
-        }
-      } catch (ignore) {}
-      const dimItems = this._uniqueCatalog(dims)
-      const measureItems = this._uniqueCatalog(measures)
-      const dimJson = JSON.stringify(dimItems)
-      const measJson = JSON.stringify(measureItems)
-      const previousDims = this.availableDimensionsJson || '[]'
-      const previousMeas = this.availableMeasuresJson || '[]'
-      if (!dimItems.length && previousDims !== '[]') {
-        this._publishingCatalog = false
-        return
-      }
-      if (dimJson === previousDims && measJson === previousMeas) {
-        this._publishingCatalog = false
-        return
-      }
-      this.dispatchEvent(new CustomEvent('propertiesChanged', {
-        detail: { properties: { availableDimensionsJson: dimJson, availableMeasuresJson: measJson } }
-      }))
-      this._publishingCatalog = false
-    }
-
-    async _runBuilderCommand (raw) {
-      if (!raw || this._runningCommand) {
-        return
-      }
-      let cmd
-      try {
-        cmd = JSON.parse(raw)
-      } catch (ignore) {
-        return
-      }
-      if (!cmd || !cmd.op || cmd.op === 'noop') {
-        return
-      }
-      if (cmd.op === 'requestCatalog') {
-        await this._publishCatalog()
-        this.dispatchEvent(new CustomEvent('propertiesChanged', {
-          detail: { properties: { builderCommand: '{"op":"noop"}' } }
-        }))
-        return
-      }
-      if (!cmd.id) {
-        return
-      }
-      const binding = this._feedBinding()
-      if (!binding) {
-        return
-      }
-      this._runningCommand = true
-      const feed = cmd.feed || 'dimensions'
-      const id = cmd.id
-      try {
-        if (cmd.op === 'addDimension' && binding.addDimensionToFeed) {
-          await binding.addDimensionToFeed(feed, id)
-        } else if (cmd.op === 'addMeasure') {
-          if (binding.addMemberToFeed) {
-            await binding.addMemberToFeed('measures', id)
-          } else if (binding.addMeasureToFeed) {
-            await binding.addMeasureToFeed('measures', id)
-          }
-        } else if (cmd.op === 'remove') {
-          if (feed === 'measures') {
-            if (binding.removeMember) {
-              await binding.removeMember('measures', id)
-            } else if (binding.removeMemberFromFeed) {
-              await binding.removeMemberFromFeed('measures', id)
-            }
-          } else if (binding.removeDimensionFromFeed) {
-            await binding.removeDimensionFromFeed(feed, id)
-          } else if (binding.removeDimension) {
-            await binding.removeDimension(id)
-          } else if (binding.removeMember) {
-            await binding.removeMember(feed, id)
-          }
-        }
-      } catch (err) {
-        console.error('Planning table builder command failed', cmd, err)
-      }
-      this._runningCommand = false
-      this.dispatchEvent(new CustomEvent('propertiesChanged', {
-        detail: { properties: { builderCommand: '{"op":"noop"}' } }
-      }))
-      this._publishCatalog()
     }
 
     render () {

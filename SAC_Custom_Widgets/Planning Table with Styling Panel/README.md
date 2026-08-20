@@ -26,13 +26,19 @@ This is the SAC resource-upload flow. You do not host the JavaScript files yours
 4. Confirm the widget **Planning Table** appears in the list.
 5. Open or create an **Optimized Story**, insert **Planning Table**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
 
-The ZIP must keep `main.js`, `builder.js`, and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/builder.js`, `/styling.js`).
+The ZIP must keep `main.js` and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/styling.js`).
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.1.4** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.2.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
-The Builder panel keeps the native **Rows** / **Columns** structure: Rows hold dimensions; Columns hold a nested **Measures** group plus optional column dimensions. Click **+ Add Dimension** or **+ Add Measure** to open the picker. The ZIP must include `builder.js` as well as `main.js` and `styling.js`.
+This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
+
+- **Rows** — dimensions
+- **Columns** — additional dimensions (shown above measures in the table)
+- **Measures** — measures or accounts
+
+Drag items from the left-side list, or use **+ Add Dimension** / **+ Add Measure** on each well.
 
 ## If the widget says data binding failed
 
@@ -41,8 +47,8 @@ That message means SAC has not returned a successful result set yet. It is not a
 1. Confirm the story is **Optimized**.
 2. Select the widget → **Builder** panel (left), not Styling.
 3. Assign a model.
-4. Drag **at least one dimension** into *Row dimensions*.
-5. Drag **at least one measure or account** into *Editable measures or accounts*. Both feeds are required.
+4. Drag **at least one dimension** into *Rows*.
+5. Drag **at least one measure or account** into *Measures*. Add dimensions to *Columns* if you want them as column headers.
 6. For planning models, add a **Version** filter (and Date/Time if the model requires it).
 7. Compare with a native Table on the same model: if the native table is empty, the custom widget will be empty too.
 
