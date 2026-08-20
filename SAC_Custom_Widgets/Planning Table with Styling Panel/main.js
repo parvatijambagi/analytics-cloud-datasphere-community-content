@@ -13,10 +13,69 @@
     return { dimensions, measures }
   }
 
+  const collectFeedValues = (feeds, names) => {
+    const values = []
+    ;(names || []).forEach(name => {
+      const feed = feeds && feeds[name]
+      const list = feed && feed.values
+      if (Array.isArray(list)) {
+        list.forEach(item => {
+          if (item != null && values.indexOf(item) === -1) {
+            values.push(item)
+          }
+        })
+      }
+    })
+    return values
+  }
+
+  const matchDimension = (dimensions, token) => {
+    const value = String(token || '')
+    if (!value) {
+      return null
+    }
+    return dimensions.find(dimension => {
+      const id = String(dimension.id || '')
+      return dimension.key === value ||
+        id === value ||
+        dimension.description === value ||
+        dimension.label === value ||
+        id.endsWith('.' + value) ||
+        id.indexOf('[' + value + ']') !== -1
+    }) || null
+  }
+
   const pickColumnDimensions = (dimensions, metadata) => {
     const feeds = (metadata && metadata.feeds) || {}
-    const keys = (feeds.columns && feeds.columns.values) || []
-    return keys.map(key => dimensions.find(dimension => dimension.key === key)).filter(Boolean)
+    let tokens = collectFeedValues(feeds, ['columns', 'series', 'column', 'columnDimensions'])
+    if (!tokens.length) {
+      Object.keys(feeds).forEach(name => {
+        if (name === 'dimensions' || name === 'rows' || name === 'measures') {
+          return
+        }
+        const feed = feeds[name]
+        if (feed && (feed.type === 'dimension' || (!feed.type && feed.values))) {
+          collectFeedValues(feeds, [name]).forEach(item => {
+            if (tokens.indexOf(item) === -1) {
+              tokens.push(item)
+            }
+          })
+        }
+      })
+    }
+    return tokens.map(token => matchDimension(dimensions, token)).filter(Boolean)
+  }
+
+  const pickRowDimensions = (dimensions, metadata, colDims) => {
+    const feeds = (metadata && metadata.feeds) || {}
+    const tokens = collectFeedValues(feeds, ['dimensions', 'rows'])
+    const mapped = tokens.map(token => matchDimension(dimensions, token)).filter(Boolean)
+    if (mapped.length) {
+      const colKeys = new Set((colDims || []).map(dimension => dimension.key))
+      return mapped.filter(dimension => !colKeys.has(dimension.key))
+    }
+    const colKeys = new Set((colDims || []).map(dimension => dimension.key))
+    return dimensions.filter(dimension => !colKeys.has(dimension.key))
   }
 
   const setupMessage = extra => {
@@ -413,8 +472,7 @@
       const metadata = dataBinding && dataBinding.metadata
       const { dimensions, measures } = parseMetadata(metadata)
       const colDims = pickColumnDimensions(dimensions, metadata)
-      const colKeys = new Set(colDims.map(dimension => dimension.key))
-      const rowDims = dimensions.filter(dimension => !colKeys.has(dimension.key))
+      const rowDims = pickRowDimensions(dimensions, metadata, colDims)
       const hasFeeds = (rowDims.length > 0 || colDims.length > 0) && measures.length > 0
 
       if (!dataBinding || state === 'loading' || !state) {
