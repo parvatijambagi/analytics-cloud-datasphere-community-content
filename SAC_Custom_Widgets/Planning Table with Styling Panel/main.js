@@ -476,6 +476,15 @@
           if (ds.getMeasureIds) {
             measures = measures.concat(await this._asList(ds.getMeasureIds()))
           }
+          if (ds.getMainStructureMembers) {
+            measures = measures.concat(await this._asList(ds.getMainStructureMembers()))
+          }
+          if (ds.getAccounts) {
+            measures = measures.concat(await this._asList(ds.getAccounts()))
+          }
+        }
+        if (binding && binding.getMembers) {
+          measures = measures.concat(await this._asList(binding.getMembers()))
         }
       } catch (ignore) {}
       try {
@@ -541,11 +550,6 @@
       try {
         if (cmd.op === 'addDimension' && binding.addDimensionToFeed) {
           await binding.addDimensionToFeed(feed, id)
-          if (feed === 'columns') {
-            try {
-              await binding.addDimensionToFeed('dimensions', id)
-            } catch (ignore) {}
-          }
         } else if (cmd.op === 'addMeasure') {
           if (binding.addMemberToFeed) {
             await binding.addMemberToFeed('measures', id)
@@ -559,11 +563,6 @@
             }
           } else if (binding.removeDimensionFromFeed) {
             await binding.removeDimensionFromFeed(feed, id)
-            if (feed === 'columns') {
-              try {
-                await binding.removeDimensionFromFeed('dimensions', id)
-              } catch (ignore) {}
-            }
           } else if (binding.removeDimension) {
             await binding.removeDimension(id)
           } else if (binding.removeMember) {

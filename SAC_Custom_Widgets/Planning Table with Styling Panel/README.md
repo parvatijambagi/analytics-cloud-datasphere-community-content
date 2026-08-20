@@ -30,7 +30,7 @@ The ZIP must keep `main.js`, `builder.js`, and `styling.js` at the archive root.
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.1.2** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.1.3** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 The Builder panel keeps the native **Rows** / **Columns** structure: Rows hold dimensions; Columns hold a nested **Measures** group plus optional column dimensions. Click **+ Add Dimension** or **+ Add Measure** to open the picker. The ZIP must include `builder.js` as well as `main.js` and `styling.js`.
 

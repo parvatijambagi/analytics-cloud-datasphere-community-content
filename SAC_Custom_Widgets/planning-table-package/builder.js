@@ -207,7 +207,9 @@
         (changedProps && changedProps.availableMeasuresJson) || this.availableMeasuresJson
       )
       this._loadCatalog()
-      if (!this._allDimensions.length && !this._requestedCatalog) {
+      if (changedProps && changedProps.dataBinding) {
+        this._send('requestCatalog', '', 'catalog')
+      } else if (!this._allDimensions.length && !this._requestedCatalog) {
         this._requestedCatalog = true
         this._send('requestCatalog', '', 'catalog')
       }
@@ -320,27 +322,41 @@
       try {
         const binding = this._binding()
         const ds = binding && binding.getDataSource && binding.getDataSource()
-        if (ds && ds.getDimensions) {
-          const result = ds.getDimensions()
+        const mergeAsync = (target, result) => {
           if (result && typeof result.then === 'function') {
             result.then(resolved => {
-              this._mergeItems(this._allDimensions, this._toArray(resolved))
+              this._mergeItems(target, this._toArray(resolved))
+              if (this._pickerKind) {
+                this._fillPicker(this._shadowRoot.getElementById('picker-search').value)
+              }
               this._render()
             }).catch(() => {})
           } else {
-            this._mergeItems(this._allDimensions, this._toArray(result))
+            this._mergeItems(target, this._toArray(result))
           }
         }
-        if (ds && ds.getMeasures) {
-          const result = ds.getMeasures()
-          if (result && typeof result.then === 'function') {
-            result.then(resolved => {
-              this._mergeItems(this._allMeasures, this._toArray(resolved))
-              this._render()
-            }).catch(() => {})
-          } else {
-            this._mergeItems(this._allMeasures, this._toArray(result))
+        if (ds) {
+          if (ds.getDimensions) {
+            mergeAsync(this._allDimensions, ds.getDimensions())
           }
+          if (ds.getDimensionIds) {
+            mergeAsync(this._allDimensions, ds.getDimensionIds())
+          }
+          if (ds.getMeasures) {
+            mergeAsync(this._allMeasures, ds.getMeasures())
+          }
+          if (ds.getMeasureIds) {
+            mergeAsync(this._allMeasures, ds.getMeasureIds())
+          }
+          if (ds.getMainStructureMembers) {
+            mergeAsync(this._allMeasures, ds.getMainStructureMembers())
+          }
+          if (ds.getAccounts) {
+            mergeAsync(this._allMeasures, ds.getAccounts())
+          }
+        }
+        if (binding && binding.getMembers) {
+          mergeAsync(this._allMeasures, binding.getMembers())
         }
       } catch (ignore) {}
     }
