@@ -487,5 +487,7 @@
     }
   }
 
-  customElements.define('com-sap-sac-sample-planning-table-styling', Styling)
+  if (!customElements.get('com-sap-sac-sample-planning-table-styling')) {
+    customElements.define('com-sap-sac-sample-planning-table-styling', Styling)
+  }
 })()

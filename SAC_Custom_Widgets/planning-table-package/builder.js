@@ -1262,5 +1262,7 @@
     }
   }
 
-  customElements.define('com-sap-sac-sample-planning-table-builder', Builder)
+  if (!customElements.get('com-sap-sac-sample-planning-table-builder')) {
+    customElements.define('com-sap-sac-sample-planning-table-builder', Builder)
+  }
 })()
