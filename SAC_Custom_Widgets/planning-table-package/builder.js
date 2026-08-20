@@ -8,7 +8,6 @@
         color: #32363a;
         background: #f7f7f7;
         padding: 0 0 8px;
-        position: relative;
       }
       .section + .section {
         border-top: 1px solid #e5e5e5;
@@ -94,50 +93,14 @@
         padding: 4px 2px 6px;
       }
       .measures-h .label { flex: 1; }
-      .overlay {
-        display: none;
-        position: absolute;
-        z-index: 20;
-        left: 8px;
-        right: 8px;
-        background: #fff;
-        border: 1px solid #d9d9d9;
-        border-radius: 4px;
-        box-shadow: 0 4px 16px rgba(0,0,0,.16);
-        padding: 8px;
-      }
-      .overlay.open { display: block; }
-      .overlay input {
+      select {
         width: 100%;
-        box-sizing: border-box;
         height: 28px;
         border: 1px solid #d9d9d9;
         border-radius: 4px;
-        padding: 0 8px;
         font: inherit;
-        margin-bottom: 6px;
-      }
-      .overlay .list {
-        max-height: 220px;
-        overflow: auto;
-      }
-      .overlay .opt {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-        border: 0;
-        background: none;
-        text-align: left;
-        font: inherit;
-        padding: 7px 6px;
-        cursor: pointer;
-        border-radius: 4px;
-      }
-      .overlay .opt:hover { background: #e8f4fd; }
-      .overlay .empty {
-        color: #6a6d70;
-        padding: 10px 6px;
+        background: #fff;
+        margin: 0 0 8px;
       }
       svg.ic {
         width: 16px;
@@ -154,10 +117,6 @@
       <div class="section">
         <div class="section-h" data-toggle="columns-body"><span class="chevron">▼</span> Columns<span class="spacer"></span><span class="menu">···</span></div>
         <div class="body" id="columns-body"></div>
-      </div>
-      <div class="overlay" id="picker">
-        <input id="picker-search" type="text" placeholder="Search" />
-        <div class="list" id="picker-list"></div>
       </div>
     </div>
   `
@@ -177,8 +136,6 @@
       this._measures = []
       this._allDimensions = []
       this._allMeasures = []
-      this._pickerKind = ''
-      this._pickerFeed = ''
       this._requestedCatalog = false
       this._shadowRoot.querySelectorAll('[data-toggle]').forEach(el => {
         el.addEventListener('click', () => {
@@ -187,15 +144,6 @@
           body.style.display = hidden ? '' : 'none'
           el.querySelector('.chevron').textContent = hidden ? '▼' : '▶'
         })
-      })
-      const overlay = this._shadowRoot.getElementById('picker')
-      const search = this._shadowRoot.getElementById('picker-search')
-      search.addEventListener('input', () => this._fillPicker(search.value))
-      overlay.addEventListener('click', event => event.stopPropagation())
-      this._shadowRoot.addEventListener('click', event => {
-        if (!overlay.contains(event.target) && !event.target.closest('.link')) {
-          this._closePicker()
-        }
       })
     }
 
@@ -207,19 +155,11 @@
         (changedProps && changedProps.availableMeasuresJson) || this.availableMeasuresJson
       )
       this._loadCatalog()
-      if (changedProps && changedProps.dataBinding) {
-        this._send('requestCatalog', '', 'catalog')
-      } else if (!this._allDimensions.length && !this._requestedCatalog) {
+      if (changedProps && changedProps.dataBinding && !this._requestedCatalog) {
         this._requestedCatalog = true
         this._send('requestCatalog', '', 'catalog')
       }
-      if (this._allDimensions.length) {
-        this._requestedCatalog = false
-      }
       this._render()
-      if (this._pickerKind) {
-        this._fillPicker(this._shadowRoot.getElementById('picker-search').value)
-      }
     }
 
     _item (raw) {
@@ -302,7 +242,7 @@
           return this.dataBindings.getDataBinding('dataBinding')
         }
       } catch (ignore) {}
-      return null
+      return this.dataBinding || null
     }
 
     _toArray (value) {
@@ -322,13 +262,10 @@
       try {
         const binding = this._binding()
         const ds = binding && binding.getDataSource && binding.getDataSource()
-        const mergeAsync = (target, result) => {
+        const take = (target, result) => {
           if (result && typeof result.then === 'function') {
             result.then(resolved => {
               this._mergeItems(target, this._toArray(resolved))
-              if (this._pickerKind) {
-                this._fillPicker(this._shadowRoot.getElementById('picker-search').value)
-              }
               this._render()
             }).catch(() => {})
           } else {
@@ -336,27 +273,15 @@
           }
         }
         if (ds) {
-          if (ds.getDimensions) {
-            mergeAsync(this._allDimensions, ds.getDimensions())
-          }
-          if (ds.getDimensionIds) {
-            mergeAsync(this._allDimensions, ds.getDimensionIds())
-          }
-          if (ds.getMeasures) {
-            mergeAsync(this._allMeasures, ds.getMeasures())
-          }
-          if (ds.getMeasureIds) {
-            mergeAsync(this._allMeasures, ds.getMeasureIds())
-          }
-          if (ds.getMainStructureMembers) {
-            mergeAsync(this._allMeasures, ds.getMainStructureMembers())
-          }
-          if (ds.getAccounts) {
-            mergeAsync(this._allMeasures, ds.getAccounts())
-          }
+          if (ds.getDimensions) take(this._allDimensions, ds.getDimensions())
+          if (ds.getDimensionIds) take(this._allDimensions, ds.getDimensionIds())
+          if (ds.getMeasures) take(this._allMeasures, ds.getMeasures())
+          if (ds.getMeasureIds) take(this._allMeasures, ds.getMeasureIds())
+          if (ds.getMainStructureMembers) take(this._allMeasures, ds.getMainStructureMembers())
+          if (ds.getAccounts) take(this._allMeasures, ds.getAccounts())
         }
         if (binding && binding.getMembers) {
-          mergeAsync(this._allMeasures, binding.getMembers())
+          take(this._allMeasures, binding.getMembers())
         }
       } catch (ignore) {}
     }
@@ -389,15 +314,10 @@
       }))
     }
 
-    async _remove (feedId, memberId) {
-      this._send('remove', feedId, memberId)
-    }
-
-    async _clearMeasures () {
-      this._measures.forEach(item => this._send('remove', 'measures', item.key || item.id))
-    }
-
-    async _assign (kind, feedId, id) {
+    _assign (kind, feedId, id) {
+      if (!id) {
+        return
+      }
       if (kind === 'measure') {
         this._send('addMeasure', 'measures', id)
       } else {
@@ -405,59 +325,17 @@
       }
     }
 
-    _openPicker (kind, feedId, anchor) {
-      this._pickerKind = kind
-      this._pickerFeed = feedId
-      const overlay = this._shadowRoot.getElementById('picker')
-      const search = this._shadowRoot.getElementById('picker-search')
-      search.value = ''
-      search.placeholder = kind === 'measure' ? 'Search measures' : 'Search dimensions'
-      const root = this._shadowRoot.getElementById('root')
-      const top = anchor ? (anchor.offsetTop + anchor.offsetHeight + 4) : 40
-      overlay.style.top = top + 'px'
-      overlay.classList.add('open')
-      this._fillPicker('')
-      search.focus()
-      if (!this._allDimensions.length || (kind === 'measure' && !this._allMeasures.length)) {
-        this._send('requestCatalog', '', 'catalog')
-      }
-    }
-
-    _closePicker () {
-      this._pickerKind = ''
-      this._pickerFeed = ''
-      this._shadowRoot.getElementById('picker').classList.remove('open')
-    }
-
-    _fillPicker (query) {
-      const list = this._shadowRoot.getElementById('picker-list')
-      const kind = this._pickerKind
-      const feed = this._pickerFeed
-      const options = kind === 'measure' ? this._availableMeasures() : this._availableDimensions()
-      const q = String(query || '').toLowerCase()
-      const filtered = options.filter(item => {
-        const label = (item.name || '') + ' ' + (item.id || '')
-        return !q || label.toLowerCase().indexOf(q) !== -1
-      })
-      if (!filtered.length) {
-        const empty = !this._allDimensions.length && kind !== 'measure'
-          ? 'No dimensions are available yet. Bind a model on the widget, then try Add Dimension again.'
-          : (kind === 'measure' && !this._allMeasures.length
-            ? 'No measures are available yet. Bind a model on the widget, then try Add Measure again.'
-            : 'No unused ' + (kind === 'measure' ? 'measures' : 'dimensions') + ' to add.')
-        list.innerHTML = '<div class="empty">' + empty + '</div>'
-        return
-      }
-      list.innerHTML = filtered.map(item =>
-        '<button class="opt" data-id="' + this._esc(item.id) + '">' + this._esc(item.name) + '</button>'
-      ).join('')
-      list.querySelectorAll('.opt').forEach(btn => {
-        btn.addEventListener('click', event => {
-          event.preventDefault()
-          const id = btn.getAttribute('data-id')
-          this._closePicker()
-          this._assign(kind, feed, id)
-        })
+    _fillSelect (select, items, placeholder) {
+      select.innerHTML = ''
+      const first = document.createElement('option')
+      first.value = ''
+      first.textContent = placeholder
+      select.appendChild(first)
+      items.forEach(item => {
+        const opt = document.createElement('option')
+        opt.value = item.id || item.key
+        opt.textContent = item.name || item.id || item.key
+        select.appendChild(opt)
       })
     }
 
@@ -470,11 +348,10 @@
 
     _render () {
       const rows = this._shadowRoot.getElementById('rows-body')
-      const rowChips = this._rows.length
-        ? this._rows.map(item => this._chip(item, 'dimensions', clover, true)).join('')
-        : ''
+      const rowChips = this._rows.map(item => this._chip(item, 'dimensions', clover, true)).join('')
       rows.innerHTML = rowChips +
-        '<button class="link" id="add-row-dim">' + plus + ' Add Dimension</button>'
+        '<button class="link" id="add-row-dim">' + plus + ' Add Dimension</button>' +
+        '<select id="select-row-dim"></select>'
 
       const col = this._shadowRoot.getElementById('columns-body')
       const measureChips = this._measures.map(item => this._chip(item, 'measures', ruler, false)).join('')
@@ -486,28 +363,46 @@
           '<button class="x" id="remove-measures" title="Remove Measures">×</button></div>' +
           measureChips +
           '<button class="link" id="add-measure">' + plus + ' Add Measure</button>' +
+          '<select id="select-measure"></select>' +
         '</div>' +
         columnChips +
-        '<button class="link" id="add-col-dim">' + plus + ' Add Dimension</button>'
+        '<button class="link" id="add-col-dim">' + plus + ' Add Dimension</button>' +
+        '<select id="select-col-dim"></select>'
+
+      this._fillSelect(this._shadowRoot.getElementById('select-row-dim'), this._availableDimensions(), 'Select dimension')
+      this._fillSelect(this._shadowRoot.getElementById('select-col-dim'), this._availableDimensions(), 'Select dimension')
+      this._fillSelect(this._shadowRoot.getElementById('select-measure'), this._availableMeasures(), 'Select measure')
 
       const on = (id, fn) => {
         const el = this._shadowRoot.getElementById(id)
         if (el) {
           el.addEventListener('click', event => {
             event.preventDefault()
-            event.stopPropagation()
             fn(el)
           })
         }
       }
-      on('add-row-dim', el => this._openPicker('dimension', 'dimensions', el))
-      on('add-col-dim', el => this._openPicker('dimension', 'columns', el))
-      on('add-measure', el => this._openPicker('measure', 'measures', el))
-      on('remove-measures', () => this._clearMeasures())
+      const bindSelect = (id, kind, feed) => {
+        const select = this._shadowRoot.getElementById(id)
+        select.addEventListener('change', () => {
+          const value = select.value
+          select.value = ''
+          this._assign(kind, feed, value)
+        })
+      }
+      on('add-row-dim', () => this._shadowRoot.getElementById('select-row-dim').focus())
+      on('add-col-dim', () => this._shadowRoot.getElementById('select-col-dim').focus())
+      on('add-measure', () => this._shadowRoot.getElementById('select-measure').focus())
+      on('remove-measures', () => {
+        this._measures.forEach(item => this._send('remove', 'measures', item.key || item.id))
+      })
+      bindSelect('select-row-dim', 'dimension', 'dimensions')
+      bindSelect('select-col-dim', 'dimension', 'columns')
+      bindSelect('select-measure', 'measure', 'measures')
       this._shadowRoot.querySelectorAll('.x[data-feed]').forEach(btn => {
         btn.addEventListener('click', event => {
           event.preventDefault()
-          this._remove(btn.getAttribute('data-feed'), btn.getAttribute('data-id'))
+          this._send('remove', btn.getAttribute('data-feed'), btn.getAttribute('data-id'))
         })
       })
     }

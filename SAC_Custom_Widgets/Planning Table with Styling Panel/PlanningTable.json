@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-cAQYpaBtzZyNzBqdF6oSZSEmKifY/uqzgeFdw6LMB+k=",
+      "integrity": "sha256-A4uk4qEoCKeItHu5lD1/V20LJYq5ju+Cvvo+5sIExF4=",
       "ignoreIntegrity": true
     },
     {
       "kind": "builder",
       "tag": "com-sap-sac-sample-planning-table-builder",
       "url": "/builder.js",
-      "integrity": "sha256-TfVscJgVXpZRL9QhVFApAcvW5g1YfoDR201CKUx5nMY=",
+      "integrity": "sha256-74tHFJ6NYnbyURgLocVXr4NC4rEBFspM/gVPMd2I5xk=",
       "ignoreIntegrity": true
     },
     {
@@ -199,6 +199,18 @@
       "parameters": [],
       "body": "return this.dataBindings.getDataBinding('dataBinding').getDataSource();",
       "returnType": "DataSource"
+    },
+    "getDimensions": {
+      "description": "Return model dimensions for the Builder picker",
+      "parameters": [],
+      "body": "return this.dataBindings.getDataBinding('dataBinding').getDataSource().getDimensions();",
+      "returnType": "DimensionInfo[]"
+    },
+    "getMeasures": {
+      "description": "Return model measures or accounts for the Builder picker",
+      "parameters": [],
+      "body": "return this.dataBindings.getDataBinding('dataBinding').getDataSource().getMeasures();",
+      "returnType": "MeasureInfo[]"
     },
     "getLastChange": {
       "description": "Get the last edited cell, including selection keys for setUserInput",

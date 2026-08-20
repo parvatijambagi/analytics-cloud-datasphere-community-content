@@ -553,6 +553,8 @@
         } else if (cmd.op === 'addMeasure') {
           if (binding.addMemberToFeed) {
             await binding.addMemberToFeed('measures', id)
+          } else if (binding.addMeasureToFeed) {
+            await binding.addMeasureToFeed('measures', id)
           }
         } else if (cmd.op === 'remove') {
           if (feed === 'measures') {
