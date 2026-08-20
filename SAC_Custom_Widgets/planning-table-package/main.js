@@ -138,16 +138,59 @@
     return parts.join(';')
   }
 
-  const dimName = dimension => (dimension.description || dimension.label || dimension.id || dimension.key || '')
+  const dimName = (dimension, layout) => {
+    const option = dimOption(layout, dimension)
+    if (option && option.rename) {
+      return option.rename
+    }
+    return (dimension && (dimension.description || dimension.label || dimension.id || dimension.key)) || ''
+  }
+
+  const dimOption = (layout, dimension) => {
+    const options = (layout && layout.dimOptions) || {}
+    const keys = [dimension && dimension.id, dimension && dimension.key, dimension && dimension.description]
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i] && options[keys[i]]) {
+        return options[keys[i]]
+      }
+    }
+    return null
+  }
 
   const cellId = (row, dimension) => {
     const cell = row[dimension.key]
     return (cell && (cell.id || cell.label)) || ''
   }
 
-  const cellLabel = (row, dimension) => {
-    const cell = row[dimension.key]
-    return (cell && (cell.label || cell.id)) || ''
+  const cellLabel = (row, dimension, layout) => {
+    const cell = row[dimension.key] || {}
+    const id = (cell.id || cell.label) || ''
+    const label = (cell.label || cell.id) || ''
+    const option = dimOption(layout, dimension)
+    const display = (option && option.display) || 'Description'
+    if (display === 'ID') {
+      return id || label
+    }
+    if (display === 'ID and Description') {
+      if (id && label && id !== label) {
+        return id + ' (' + label + ')'
+      }
+      return label || id
+    }
+    return label || id
+  }
+
+  const filterMembersOf = entry => {
+    if (!entry) {
+      return []
+    }
+    if (Array.isArray(entry)) {
+      return entry.map(item => typeof item === 'string' ? { id: item, name: item } : { id: item.id || item.key, name: item.name || item.id || item.key })
+    }
+    if (Array.isArray(entry.members)) {
+      return entry.members.map(item => typeof item === 'string' ? { id: item, name: item } : { id: item.id || item.key, name: item.name || item.id || item.key })
+    }
+    return []
   }
 
   const matchesName = (dimension, requested) => {
@@ -168,11 +211,12 @@
           rows: Array.isArray(parsed.rows) ? parsed.rows : [],
           columns: Array.isArray(parsed.columns) ? parsed.columns : [],
           measures: Array.isArray(parsed.measures) ? parsed.measures : [],
-          filters: parsed.filters && typeof parsed.filters === 'object' ? parsed.filters : {}
+          filters: parsed.filters && typeof parsed.filters === 'object' && !Array.isArray(parsed.filters) ? parsed.filters : {},
+          dimOptions: parsed.dimOptions && typeof parsed.dimOptions === 'object' ? parsed.dimOptions : {}
         }
       }
     } catch (ignore) {}
-    return { active: false, rows: [], columns: [], measures: [], filters: {} }
+    return { active: false, rows: [], columns: [], measures: [], filters: {}, dimOptions: {} }
   }
 
   const matchLayoutItem = (item, candidate) => {
@@ -222,10 +266,23 @@
   }
 
   const pickMeasures = (measures, layout) => {
+    let list = measures
     if (layout && layout.active) {
-      return orderByLayout(measures, layout.measures)
+      list = orderByLayout(measures, layout.measures)
+      const measureFilter = layout.filters && (layout.filters.measures || layout.filters.Measures)
+      const filtered = filterMembersOf(measureFilter)
+      if (filtered.length) {
+        const ids = filtered.map(item => String(item.id || item.name).toLowerCase())
+        const fromAxis = list.filter(item => ids.indexOf(String(item.id || '').toLowerCase()) !== -1 || ids.indexOf(String(item.key || '').toLowerCase()) !== -1 || ids.indexOf(String(item.label || '').toLowerCase()) !== -1)
+        if (fromAxis.length) {
+          return fromAxis
+        }
+        if (!layout.measures.length) {
+          return orderByLayout(measures, filtered)
+        }
+      }
     }
-    return measures
+    return list
   }
 
   const applyLayoutFilters = (data, dimensions, layout) => {
@@ -233,9 +290,10 @@
       return data
     }
     const entries = Object.keys(layout.filters).map(dimId => {
-      const allowed = (layout.filters[dimId] || []).map(id => String(id))
-      return { dimId, allowed }
-    }).filter(entry => entry.allowed.length)
+      const members = filterMembersOf(layout.filters[dimId])
+      const kind = (layout.filters[dimId] && layout.filters[dimId].kind) || (String(dimId).toLowerCase() === 'measures' ? 'measures' : 'dimension')
+      return { dimId, kind, allowed: members.map(item => String(item.id)) }
+    }).filter(entry => entry.kind !== 'measures' && entry.allowed.length)
     if (!entries.length) {
       return data
     }
@@ -251,7 +309,7 @@
     })
   }
 
-  const columnTuples = (data, colDims) => {
+  const columnTuples = (data, colDims, layout) => {
     if (!colDims.length) {
       return [{ key: '', cells: [] }]
     }
@@ -263,7 +321,7 @@
         seen.add(key)
         list.push({
           key,
-          cells: colDims.map(dimension => ({ id: cellId(row, dimension), label: cellLabel(row, dimension) }))
+          cells: colDims.map(dimension => ({ id: cellId(row, dimension), label: cellLabel(row, dimension, layout) }))
         })
       }
     })
@@ -502,7 +560,7 @@
       this._collapsed = new Set()
       this._comments = new Map()
       this._cellIndex = new Map()
-      this._layout = { active: false, rows: [], columns: [], measures: [], filters: {} }
+      this._layout = { active: false, rows: [], columns: [], measures: [], filters: {}, dimOptions: {} }
     }
 
     onCustomWidgetResize () {
@@ -798,6 +856,40 @@
       }
     }
 
+    async _loadHierarchies (dimId) {
+      const binding = this._feedBinding()
+      const ds = binding && binding.getDataSource && binding.getDataSource()
+      const hierarchies = [{ id: '', name: 'Flat presentation' }]
+      if (ds && dimId && ds.getHierarchies) {
+        try {
+          const raw = this._asList(await ds.getHierarchies(dimId))
+          raw.forEach(item => {
+            const id = this._itemId(item)
+            if (id) {
+              hierarchies.push({ id, name: this._itemName(item, ds, 'dimension') })
+            }
+          })
+        } catch (err) {
+          console.error('Planning table getHierarchies failed', dimId, err)
+        }
+      }
+      const json = JSON.stringify({ dimId, hierarchies })
+      if (json !== this.dimensionHierarchiesJson) {
+        this.dispatchEvent(new CustomEvent('propertiesChanged', {
+          detail: { properties: { dimensionHierarchiesJson: json } }
+        }))
+      }
+    }
+
+    async _setHierarchy (dimId, hierarchyId) {
+      const binding = this._feedBinding()
+      const ds = binding && binding.getDataSource && binding.getDataSource()
+      if (!ds || !dimId) {
+        return
+      }
+      await this._tryCall(() => ds.setHierarchy && ds.setHierarchy(dimId, hierarchyId || null))
+    }
+
     async _runBuilderCommand (raw) {
       if (!raw || this._runningCommand) {
         return
@@ -842,6 +934,12 @@
           await this._setDimensionFilter(cmd.dimId || cmd.id, cmd.members || [])
         } else if (cmd.op === 'loadMembers') {
           await this._loadFilterMembers(cmd.dimId || cmd.id)
+        } else if (cmd.op === 'loadHierarchies') {
+          await this._loadHierarchies(cmd.dimId || cmd.id)
+        } else if (cmd.op === 'setHierarchy') {
+          await this._setHierarchy(cmd.dimId || cmd.id, cmd.hierarchyId || cmd.hierarchy || '')
+        } else if (cmd.op === 'setDimOptions') {
+          // Display, rename, totals, and visibility are applied from builderLayoutJson.
         } else if (cmd.op === 'reorder') {
           if (feed === 'columns' || feed === 'dimensions') {
             for (const id of ids) {
@@ -963,7 +1061,7 @@
       const vAlign = this.vAlign || 'middle'
       const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
-      const colMembers = columnTuples(data, colDims)
+      const colMembers = columnTuples(data, colDims, layout)
       const hasColDims = colDims.length > 0
       const rowTuples = []
       const seenRows = new Set()
@@ -991,6 +1089,22 @@
         return rowTuples.some(other => other.key !== tuple.key && prefixKey(other, dimIndex) === prefix)
       }
       const isHidden = tuple => {
+        const hideParents = rowDims.some(dimension => {
+          const option = dimOption(layout, dimension)
+          return option && option.visibility === 'Hide Parent Nodes'
+        })
+        if (hideParents && rowDims.length) {
+          const dimension = rowDims[rowDims.length - 1]
+          const id = cellId(tuple.row, dimension)
+          const isParent = rowTuples.some(other => {
+            const otherCell = other.row[dimension.key] || {}
+            const otherId = cellId(other.row, dimension)
+            return other.key !== tuple.key && ((otherCell.parentId && otherCell.parentId === id) || (id && otherId !== id && otherId.indexOf(id) !== -1))
+          })
+          if (isParent) {
+            return true
+          }
+        }
         if (rowDims.length === 1) {
           const id = cellId(tuple.row, rowDims[0])
           for (const collapsedId of this._collapsed) {
@@ -1028,7 +1142,7 @@
           if (dimIndex === 0) {
             table += `<th class="group" colspan="${rowDimCount}" rowspan="${colHeaderRows}" style="${headerStyle};text-align:${hAlign}">Measures</th>`
           }
-          table += `<th class="group" style="${headerStyle}">${this._escape(dimName(dimension))}</th>`
+          table += `<th class="group" style="${headerStyle}">${this._escape(dimName(dimension, layout))}</th>`
           headerGroups(colMembers, dimIndex).forEach(group => {
             table += `<th class="group" colspan="${group.span * measureSpan}" style="${headerStyle}">${this._escape(group.label)}</th>`
           })
@@ -1051,7 +1165,7 @@
           table += `<th class="group" style="${headerStyle};text-align:${hAlign}">Measures</th>`
         } else {
           rowDims.forEach(dimension => {
-            table += `<th style="${headerStyle};text-align:${hAlign}">${this._escape(dimName(dimension))}</th>`
+            table += `<th style="${headerStyle};text-align:${hAlign}">${this._escape(dimName(dimension, layout))}</th>`
           })
         }
         measureList.forEach(measure => {
@@ -1070,7 +1184,7 @@
       visibleTuples.forEach(tuple => {
         table += '<tr>'
         rowDims.forEach((dimension, dimIndex) => {
-          const label = cellLabel(tuple.row, dimension)
+          const label = cellLabel(tuple.row, dimension, layout)
           const cell = tuple.row[dimension.key] || {}
           const id = cellId(tuple.row, dimension)
           const children = dimIndex < rowDims.length - 1
@@ -1137,7 +1251,8 @@
       })
       table += '</tbody>'
 
-      if (this.showTotals !== false) {
+      const anyDimTotals = !!(layout && layout.dimOptions && Object.keys(layout.dimOptions).some(key => layout.dimOptions[key] && layout.dimOptions[key].totals))
+      if (this.showTotals !== false || anyDimTotals) {
         table += '<tfoot><tr>'
         table += `<td colspan="${rowDimCount}" style="${cellChrome};text-align:${hAlign}">Total</td>`
         if (hasColDims) {

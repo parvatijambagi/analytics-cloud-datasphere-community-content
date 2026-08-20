@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-Ax2a3hhJPFoUWP4DYYVO3oONMQKMl9XTDwV/k8W9q7g=",
+      "integrity": "sha256-5+F6IkaYz4iw29JSWMC10YlvRxqLZVq1YsAPKFNgDM0=",
       "ignoreIntegrity": false
     },
     {
       "kind": "builder",
       "tag": "com-sap-sac-sample-planning-table-builder",
       "url": "/builder.js",
-      "integrity": "sha256-SdZpopiqCXCc8uMwzLXzryEWbBLS3p5Gf9rDj3jh2g8=",
+      "integrity": "sha256-1NBU11XRkeyrV8tkJ0ANqtR8Ah4iBt6FPktDwcaX3wc=",
       "ignoreIntegrity": false
     },
     {
@@ -186,6 +186,11 @@
       "type": "string",
       "default": "",
       "description": "Dimension members loaded for the Builder filter picker"
+    },
+    "dimensionHierarchiesJson": {
+      "type": "string",
+      "default": "",
+      "description": "Hierarchies loaded for the dimension context menu"
     },
     "availableDimensionsJson": {
       "type": "string",

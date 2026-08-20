@@ -30,7 +30,7 @@ The ZIP must keep `main.js`, `builder.js`, and `styling.js` at the archive root.
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.9.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.10.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 ## If the widget says data binding failed
 
@@ -95,7 +95,7 @@ Use the widget **Submit** button (or `PlanningTable_1.submitChanges()`), then in
 Matches the native SAC table styling and Builder sections as far as a custom widget can:
 
 - **Table Type** — Cross-Tab or Forecast Layout
-- **Rows / Columns / Measures / Filters** — custom Builder: add only what you need, × to remove, drag to reorder, funnel to filter a dimension. Measures can be empty; column dimensions are added with **+ Add Dimension** under Columns.
+- **Rows / Columns / Measures / Filters** — custom Builder: add only what you need, × to remove, drag to reorder. Dimension **···** opens Hierarchy, Display Options, Rename, Show Unbooked Data, Show Totals, Data Visibility, and Properties. The **Filters** section lists a dimension only after you apply member filters (funnel or **+ Add Filter**).
 - **Planning** — enabled, fluid data entry, locking/DAC indicators, booked/unbooked display
 - **Table Properties** — comments (right-click), calculation priority, disable interaction, data refresh
 - **Styling Rules, Lines, Font, Number Format** — as before
