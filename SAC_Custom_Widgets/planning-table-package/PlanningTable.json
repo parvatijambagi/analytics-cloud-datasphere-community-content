@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-DriuZ7D25wGSXDc4uT+0+3YtWFNyr+iHiSqDm2jU9aY=",
+      "integrity": "sha256-qDcYuXW7FurDpcHSJ5GnkWdq3hHxdluE31A0Z022i/U=",
       "ignoreIntegrity": true
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling",
       "url": "/styling.js",
-      "integrity": "sha256-6Wza1oeBrxq6MGwaHS0AKNBAuYsHRAn1mgj5NtrCOgc=",
+      "integrity": "sha256-BrtF8NYeT5YF1wtESrwTKTGNpA0xHypHFq4GYiftif0=",
       "ignoreIntegrity": true
     }
   ],
@@ -173,7 +173,7 @@
     "columnDimension": {
       "type": "string",
       "default": "Auto",
-      "description": "Auto places Version and Date on columns. None keeps every dimension on rows. Or comma-separated names such as Version,Date"
+      "description": "Auto shows Date, Version, and Depthstructure as selector rows under Measures. None keeps every dimension on data rows."
     }
   },
   "methods": {

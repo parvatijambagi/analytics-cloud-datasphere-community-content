@@ -220,10 +220,10 @@
       <h3>Table</h3>
       <label for="columnDimension">Column dimensions</label>
       <select id="columnDimension">
-        <option value="Auto">Auto (Version and Date)</option>
+        <option value="Auto">Auto (Date, Version, Depthstructure)</option>
         <option value="None">None (all dimensions on rows)</option>
       </select>
-      <p class="hint">If the Builder Columns well does not keep a dimension, add Version and Date in Rows. Auto still places them on columns, like the native table.</p>
+      <p class="hint">Auto shows Date, Version, and Depthstructure as selector rows under Measures (current member plus dropdown), like a native table. None keeps every dimension as a data row.</p>
       <label for="headerBackground">Header background</label>
       <input id="headerBackground" type="text" placeholder="#0854A0" />
       <label for="headerTextColor">Header text color</label>

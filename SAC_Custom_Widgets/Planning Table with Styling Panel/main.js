@@ -49,6 +49,7 @@
 
   const isVersionDim = dimension => /version/.test(dimName(dimension).toLowerCase())
   const isDateDim = dimension => /date|time|month|period|year|calmonth|fiscal/.test(dimName(dimension).toLowerCase())
+  const isSelectorDim = dimension => isVersionDim(dimension) || isDateDim(dimension) || /depth|structure/.test(dimName(dimension).toLowerCase())
 
   const pickColumnDimensions = (dimensions, metadata, columnDimension) => {
     if (!dimensions || !dimensions.length) {
@@ -82,8 +83,11 @@
     if (requested !== 'Auto') {
       return requested.split(',').map(part => matchDimension(dimensions, part.trim())).filter(Boolean)
     }
-    const auto = dimensions.filter(dimension => isVersionDim(dimension) || isDateDim(dimension))
-    auto.sort((a, b) => (isVersionDim(a) ? 0 : 1) - (isVersionDim(b) ? 0 : 1))
+    const auto = dimensions.filter(isSelectorDim)
+    auto.sort((a, b) => {
+      const rank = dimension => isDateDim(dimension) ? 0 : (isVersionDim(dimension) ? 1 : 2)
+      return rank(a) - rank(b)
+    })
     return auto
   }
 
@@ -107,8 +111,8 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add row dimensions such as ARE to <em>Rows</em>.</li>
-          <li>Add <em>Version</em> and <em>Date</em> in Builder (Rows or Columns). They are placed on columns automatically, like a native planning table.</li>
+          <li>Add row members such as ARE to <em>Rows</em>.</li>
+          <li>Add Date, Version, or Depthstructure in Builder. They appear as selector rows under Measures, with the current member and a dropdown, like a native table.</li>
           <li>Add measures such as Global Currency and Local Currency to <em>Measures</em>.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
         </ol>
@@ -346,6 +350,27 @@
       td.dim {
         background: #f8f9fa;
       }
+      tr.selector th, tr.selector td {
+        position: static;
+        background: #fff;
+        color: #32363a;
+        font-weight: 700;
+        text-align: left;
+      }
+      select.member-link {
+        max-width: 100%;
+        border: 0;
+        background: transparent;
+        color: #0854a0;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .chev {
+        color: #0854a0;
+        font-size: 11px;
+        margin-left: 4px;
+      }
       tfoot td {
         font-weight: 600;
         background: #f5f6f7;
@@ -410,6 +435,7 @@
       }
       this._editing = false
       this._props = {}
+      this._dimFilters = {}
     }
 
     onCustomWidgetResize () {
@@ -493,9 +519,9 @@
       const data = dataBinding && dataBinding.data
       const metadata = dataBinding && dataBinding.metadata
       const { dimensions, measures } = parseMetadata(metadata)
-      const colDims = pickColumnDimensions(dimensions, metadata, this.columnDimension)
-      const rowDims = pickRowDimensions(dimensions, metadata, colDims)
-      const hasFeeds = (rowDims.length > 0 || colDims.length > 0) && measures.length > 0
+      const selectorDims = pickColumnDimensions(dimensions, metadata, this.columnDimension)
+      const rowDims = pickRowDimensions(dimensions, metadata, selectorDims)
+      const hasFeeds = (rowDims.length > 0 || selectorDims.length > 0) && measures.length > 0
 
       if (!dataBinding || state === 'loading' || !state) {
         this._tableWrap.innerHTML = setupMessage('Waiting for the data binding to finish loading.')
@@ -525,8 +551,42 @@
         return
       }
 
-      this._dimensions = rowDims.concat(colDims)
+      this._dimensions = rowDims.concat(selectorDims)
       this._measures = measures
+      if (!this._dimFilters) {
+        this._dimFilters = {}
+      }
+
+      const membersOf = dimension => {
+        const seen = new Map()
+        data.forEach(row => {
+          const cell = row[dimension.key] || {}
+          const id = cell.id || ''
+          if (!seen.has(id)) {
+            seen.set(id, cell.label || cell.id || '(all)')
+          }
+        })
+        return Array.from(seen.keys()).map(id => ({ id, label: seen.get(id) }))
+      }
+      const selectedMember = dimension => {
+        if (this._dimFilters[dimension.key]) {
+          return this._dimFilters[dimension.key]
+        }
+        const members = membersOf(dimension)
+        if (members.length === 1) {
+          return members[0].id
+        }
+        const ids = members.map(item => item.id).filter((id, index, list) => list.indexOf(id) === index)
+        return ids.length === 1 ? ids[0] : ''
+      }
+      let view = data
+      selectorDims.forEach(dimension => {
+        const selected = this._dimFilters[dimension.key]
+        if (!selected) {
+          return
+        }
+        view = view.filter(row => ((row[dimension.key] && row[dimension.key].id) || '') === selected)
+      })
 
       const headerBg = this.headerBackground || '#0854A0'
       const headerFg = this.headerTextColor || '#FFFFFF'
@@ -557,72 +617,58 @@
       const vAlign = this.vAlign || 'middle'
       const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
-      const colMembers = []
-      if (colDims.length) {
-        const seenCols = new Set()
-        data.forEach(row => {
-          const key = colDims.map(dimension => (row[dimension.key] && row[dimension.key].id) || '').join('|')
-          if (!seenCols.has(key)) {
-            seenCols.add(key)
-            colMembers.push({
-              key,
-              label: colDims.map(dimension => {
-                const cell = row[dimension.key] || {}
-                return cell.label || cell.id || ''
-              }).join(' / ')
-            })
-          }
-        })
-      } else {
-        colMembers.push({ key: '', label: '' })
-      }
       const seenRows = new Set()
       const rowTuples = []
-      data.forEach(row => {
+      view.forEach(row => {
         const key = rowKey(row, rowDims)
         if (!seenRows.has(key)) {
           seenRows.add(key)
           rowTuples.push(row)
         }
       })
-      const findCellRow = (rowTuple, colKey) => {
-        if (!colDims.length) {
-          return rowTuple
-        }
-        const rKey = rowKey(rowTuple, rowDims)
-        return data.find(row => rowKey(row, rowDims) === rKey && colDims.map(dimension => (row[dimension.key] && row[dimension.key].id) || '').join('|') === colKey) || {}
-      }
 
-      const totals = colMembers.map(() => measures.map(() => 0))
+      const totals = measures.map(() => 0)
+      const rowHeaderCount = Math.max(rowDims.length, 1)
       let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
-      if (colDims.length) {
-        table += '<tr>'
-        rowDims.forEach(dimension => {
-          table += `<th rowspan="2" style="${cellChrome};text-align:${hAlign}">${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
+      table += '<tr>'
+      table += `<th style="${cellChrome};text-align:${hAlign}">Measures</th>`
+      if (rowDims.length > 1) {
+        rowDims.slice(1).forEach(() => {
+          table += `<th style="${cellChrome}"></th>`
         })
-        if (!rowDims.length) {
-          table += `<th rowspan="2" style="${cellChrome}"></th>`
-        }
-        colMembers.forEach(member => {
-          table += `<th class="group" colspan="${measures.length}" style="${cellChrome};text-align:center">${this._escape(member.label)}</th>`
-        })
-        table += '</tr><tr>'
-        colMembers.forEach(() => {
-          measures.forEach(measure => {
-            table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
-          })
-        })
-        table += '</tr>'
-      } else {
-        table += '<tr>'
-        rowDims.forEach(dimension => {
-          table += `<th style="${cellChrome};text-align:${hAlign}">${this._escape(dimension.description || dimension.id || dimension.key)}</th>`
-        })
-        measures.forEach(measure => {
-          table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
-        })
-        table += '</tr>'
       }
+      measures.forEach(measure => {
+        table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+      })
+      table += '</tr>'
+      selectorDims.forEach(dimension => {
+        const members = membersOf(dimension)
+        const selected = selectedMember(dimension)
+        const selectedLabel = (members.find(item => item.id === selected) || {}).label || '(all)'
+        table += '<tr class="selector">'
+        table += `<th class="selector">${this._escape(dimName(dimension))}<span class="chev">▸</span></th>`
+        if (rowDims.length > 1) {
+          rowDims.slice(1).forEach(() => {
+            table += '<th class="selector"></th>'
+          })
+        }
+        measures.forEach((measure, measureIndex) => {
+          table += '<td class="selector">'
+          if (measureIndex === 0) {
+            table += `<select class="member-link" data-dim="${this._escape(dimension.key)}">`
+            table += '<option value="">(all)</option>'
+            members.forEach(item => {
+              const isSel = item.id === selected ? ' selected' : ''
+              table += `<option value="${this._escape(item.id)}"${isSel}>${this._escape(item.label || item.id || '(all)')}</option>`
+            })
+            table += '</select><span class="chev">▸</span>'
+          } else {
+            table += `<span class="member-link">${this._escape(selectedLabel)}</span><span class="chev">▸</span>`
+          }
+          table += '</td>'
+        })
+        table += '</tr>'
+      })
       table += '</thead><tbody>'
 
       rowTuples.forEach((row, rowIndex) => {
@@ -635,31 +681,28 @@
         if (!rowDims.length) {
           table += `<td class="dim" style="${cellChrome}"></td>`
         }
-        colMembers.forEach((member, colIndex) => {
-          const source = findCellRow(row, member.key)
-          measures.forEach((measure, measureIndex) => {
-            const bound = source[measure.key] || {}
-            const original = bound.raw
-            const key = changeKey(row, rowDims, measure.key) + '||' + member.key
-            const pending = this._pending.get(key)
-            const current = pending ? pending.value : original
-            if (typeof current === 'number' && !Number.isNaN(current)) {
-              totals[colIndex][measureIndex] += current
-            }
-            const isChanged = !!pending
-            const display = formatNumber(current, formatOpts, bound.formatted)
-            const unit = bound.unit ? ` title="${this._escape(bound.unit)}"` : ''
-            const measureKind = editable ? 'editable' : 'readonly-account'
-            const measureRule = firstMatchingRule(rules, measureKind)
-            const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
-            if (editable) {
-              table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" data-col="${this._escape(member.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
-              table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" data-col="${this._escape(member.key)}" />`
-              table += '</td>'
-            } else {
-              table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
-            }
-          })
+        measures.forEach((measure, measureIndex) => {
+          const bound = row[measure.key] || {}
+          const original = bound.raw
+          const key = changeKey(row, rowDims, measure.key)
+          const pending = this._pending.get(key)
+          const current = pending ? pending.value : original
+          if (typeof current === 'number' && !Number.isNaN(current)) {
+            totals[measureIndex] += current
+          }
+          const isChanged = !!pending
+          const display = formatNumber(current, formatOpts, bound.formatted)
+          const unit = bound.unit ? ` title="${this._escape(bound.unit)}"` : ''
+          const measureKind = editable ? 'editable' : 'readonly-account'
+          const measureRule = firstMatchingRule(rules, measureKind)
+          const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
+          if (editable) {
+            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
+            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" />`
+            table += '</td>'
+          } else {
+            table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
+          }
         })
         table += '</tr>'
       })
@@ -667,21 +710,28 @@
 
       if (this.showTotals !== false) {
         table += '<tfoot><tr>'
-        table += `<td colspan="${Math.max(rowDims.length, 1)}" style="${cellChrome};text-align:${hAlign}">Total</td>`
-        colMembers.forEach((member, colIndex) => {
-          totals[colIndex].forEach(total => {
-            table += `<td class="measure" style="${cellChrome};text-align:right">${this._escape(formatNumber(total, formatOpts))}</td>`
-          })
+        table += `<td colspan="${rowHeaderCount}" style="${cellChrome};text-align:${hAlign}">Total</td>`
+        totals.forEach(total => {
+          table += `<td class="measure" style="${cellChrome};text-align:right">${this._escape(formatNumber(total, formatOpts))}</td>`
         })
         table += '</tr></tfoot>'
       }
       table += '</table>'
 
       this._tableWrap.innerHTML = table
-      const headerCells = this._tableWrap.querySelectorAll('th')
-      headerCells.forEach(cell => {
+      this._tableWrap.querySelectorAll('thead tr:first-child th').forEach(cell => {
         cell.style.background = headerBg
         cell.style.color = headerFg
+      })
+
+      this._tableWrap.querySelectorAll('select.member-link').forEach(select => {
+        select.addEventListener('change', () => {
+          const dimKey = select.getAttribute('data-dim')
+          this._dimFilters[dimKey] = select.value
+          const dimension = selectorDims.find(item => item.key === dimKey)
+          this._applyDimensionFilter(dimension, select.value)
+          this.render()
+        })
       })
 
       this._tableWrap.querySelectorAll('input.cell-input').forEach(input => {
@@ -691,7 +741,7 @@
         })
         input.addEventListener('blur', () => {
           this._editing = false
-          this._commitInput(input, rowTuples, rowDims, measures, decimalPlaces, data, colDims)
+          this._commitInput(input, rowTuples, rowDims.concat(selectorDims), measures, decimalPlaces, view, [])
         })
         input.addEventListener('keydown', event => {
           if (event.key === 'Enter') {
@@ -706,6 +756,25 @@
       })
 
       this._renderToolbar()
+    }
+
+    async _applyDimensionFilter (dimension, memberId) {
+      if (!dimension) {
+        return
+      }
+      try {
+        const binding = this.dataBindings && this.dataBindings.getDataBinding && this.dataBindings.getDataBinding('dataBinding')
+        const ds = binding && binding.getDataSource && binding.getDataSource()
+        if (ds && ds.setDimensionFilter) {
+          if (memberId) {
+            await ds.setDimensionFilter(dimension.id || dimension.key, memberId)
+          } else if (ds.removeDimensionFilter) {
+            await ds.removeDimensionFilter(dimension.id || dimension.key)
+          } else {
+            await ds.setDimensionFilter(dimension.id || dimension.key, [])
+          }
+        }
+      } catch (ignore) {}
     }
 
     _commitInput (input, rowTuples, rowDims, measures, decimalPlaces, data, colDims) {
