@@ -30,7 +30,7 @@ The ZIP must keep `main.js`, `builder.js`, and `styling.js` at the archive root.
 
 If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.10.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+Re-upload as version **1.11.0** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
 
 ## If the widget says data binding failed
 

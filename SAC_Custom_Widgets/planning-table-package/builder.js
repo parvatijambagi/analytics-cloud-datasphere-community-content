@@ -118,14 +118,41 @@
         z-index: 21;
       }
       .popover {
-        left: 8px;
-        right: 8px;
-        top: 48px;
-        max-height: 70%;
-        overflow: auto;
-        padding: 8px;
+        left: 6px;
+        right: 6px;
+        top: 6px;
+        bottom: 6px;
+        max-height: none;
+        overflow: hidden;
+        padding: 0;
+        flex-direction: column;
       }
-      .popover.open, .ctx.open, .ctx-sub.open { display: block; }
+      .popover.open { display: flex; }
+      .ctx.open, .ctx-sub.open { display: block; }
+      .popover-head { flex: 0 0 auto; padding: 8px 8px 0; }
+      #pop-body { flex: 1 1 auto; overflow: auto; padding: 0 8px 8px; min-height: 0; }
+      #pop-foot {
+        flex: 0 0 auto;
+        padding: 8px;
+        border-top: 1px solid #e5e5e5;
+        background: #fff;
+      }
+      .dialog-title { font-weight: 700; font-size: 14px; margin: 4px 0 10px; }
+      .field-label { font-weight: 700; margin: 8px 0 4px; }
+      .select {
+        width: 100%;
+        font: inherit;
+        padding: 6px 8px;
+        border: 1px solid #0854a0;
+        border-radius: 2px;
+        background: #fff;
+      }
+      .radio-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 4px;
+      }
       .ctx, .ctx-sub {
         min-width: 210px;
         padding: 4px 0;
@@ -211,8 +238,11 @@
       </div>
       <div class="popover-back" id="pop-back"></div>
       <div class="popover" id="popover">
-        <div class="search" id="search-wrap"><input id="pop-search" placeholder="Search" /><span>🔍</span></div>
+        <div class="popover-head">
+          <div class="search" id="search-wrap"><input id="pop-search" placeholder="Search" /><span>🔍</span></div>
+        </div>
         <div id="pop-body"></div>
+        <div id="pop-foot"></div>
       </div>
       <div class="ctx" id="ctx-menu"></div>
       <div class="ctx-sub" id="ctx-sub"></div>
@@ -241,6 +271,7 @@
 
   const defaultDimOption = () => ({
     hierarchy: '',
+    hierarchyLevel: '',
     display: 'Description',
     rename: '',
     unbooked: false,
@@ -342,7 +373,7 @@
           name = val.name || key
           kind = val.kind || kind
         }
-        if (members.length) {
+        if (members.length && kind !== 'measures' && String(key).toLowerCase() !== 'measures') {
           out[key] = { id: (val && val.id) || key, name, kind, members }
         }
       })
@@ -385,8 +416,8 @@
         const parsed = JSON.parse(json || '{}')
         if (parsed && Array.isArray(parsed.hierarchies)) {
           this._hierarchies = parsed.hierarchies
-          if (this._ctxItem && this._shadowRoot.getElementById('ctx-sub').classList.contains('open')) {
-            this._showHierarchySub()
+          if (this._pickerKind === 'hierarchy') {
+            this._fillHierarchyDialog()
           }
         }
       } catch (ignore) {}
@@ -450,11 +481,21 @@
       if (!this._layout.dimOptions) {
         this._layout.dimOptions = {}
       }
-      const id = this._itemId(item)
-      if (!this._layout.dimOptions[id]) {
-        this._layout.dimOptions[id] = defaultDimOption()
+      const ids = [item && item.id, item && item.key, item && item.name].filter(Boolean)
+      const options = this._layout.dimOptions
+      let found = null
+      ids.forEach(id => {
+        if (!found && options[id]) {
+          found = options[id]
+        }
+      })
+      if (!found) {
+        found = defaultDimOption()
       }
-      return this._layout.dimOptions[id]
+      ids.forEach(id => {
+        options[id] = found
+      })
+      return found
     }
 
     _displayName (item) {
@@ -464,7 +505,9 @@
 
     _activeFilters () {
       const filters = this._layout.filters || {}
-      return Object.keys(filters).map(key => filters[key]).filter(entry => entry && entry.members && entry.members.length)
+      return Object.keys(filters).map(key => filters[key]).filter(entry => {
+        return entry && entry.kind !== 'measures' && String(entry.id).toLowerCase() !== 'measures' && entry.members && entry.members.length
+      })
     }
 
     _filterFor (item) {
@@ -478,7 +521,21 @@
       return null
     }
 
+    _request (op, extra) {
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: {
+          properties: {
+            builderCommand: JSON.stringify(Object.assign({ op, t: Date.now() }, extra || {}))
+          }
+        }
+      }))
+    }
+
     _emit (op, extra) {
+      if (op === 'loadMembers' || op === 'loadHierarchies') {
+        this._request(op, extra)
+        return
+      }
       this._layout.active = true
       const payload = Object.assign({
         op,
@@ -533,6 +590,9 @@
 
     _setFilter (item, members) {
       const id = this._itemId(item)
+      if (!id || String(id).toLowerCase() === 'measures' || (item && item.kind === 'measures')) {
+        return
+      }
       if (!this._layout.filters) {
         this._layout.filters = {}
       }
@@ -609,6 +669,8 @@
     _closePicker () {
       this._shadowRoot.getElementById('popover').classList.remove('open')
       this._shadowRoot.getElementById('pop-back').classList.remove('open')
+      this._shadowRoot.getElementById('pop-foot').innerHTML = ''
+      this._shadowRoot.getElementById('search-wrap').style.display = ''
       this._pickerKind = 'dimension'
     }
 
@@ -628,10 +690,30 @@
       this._shadowRoot.getElementById('pop-search').focus()
     }
 
+    _openDialog (kind) {
+      this._pickerKind = kind
+      this._shadowRoot.getElementById('pop-search').value = ''
+      this._shadowRoot.getElementById('search-wrap').style.display = 'none'
+      this._shadowRoot.getElementById('pop-back').classList.add('open')
+      this._shadowRoot.getElementById('popover').classList.add('open')
+      this._fillPicker()
+    }
+
+    _setFoot (html, bind) {
+      const foot = this._shadowRoot.getElementById('pop-foot')
+      foot.innerHTML = html || ''
+      if (bind) {
+        bind(foot)
+      }
+    }
+
     _openFilterPicker (item) {
+      if (!item || item.kind === 'measures' || this._itemId(item) === 'measures') {
+        return
+      }
       this._filterItem = this._cloneItem(item)
-      this._filterItem.kind = item.kind || (this._itemId(item) === 'measures' ? 'measures' : 'dimension')
-      this._filterMembers = this._filterItem.kind === 'measures' ? this._allMeasures.slice() : []
+      this._filterItem.kind = 'dimension'
+      this._filterMembers = []
       this._pickerKind = 'filter'
       this._pickerFeed = this._itemId(this._filterItem)
       this._shadowRoot.getElementById('pop-search').value = ''
@@ -639,9 +721,7 @@
       this._shadowRoot.getElementById('pop-back').classList.add('open')
       this._shadowRoot.getElementById('popover').classList.add('open')
       this._fillPicker()
-      if (this._filterItem.kind !== 'measures') {
-        this._emit('loadMembers', { id: this._itemId(this._filterItem), dimId: this._itemId(this._filterItem), feed: 'filters' })
-      }
+      this._request('loadMembers', { id: this._itemId(this._filterItem), dimId: this._itemId(this._filterItem), feed: 'filters' })
     }
 
     _openAddFilter () {
@@ -651,6 +731,7 @@
     _fillPicker () {
       const q = (this._shadowRoot.getElementById('pop-search').value || '').toLowerCase()
       const body = this._shadowRoot.getElementById('pop-body')
+      this._setFoot('')
       if (this._pickerKind === 'filter-source') {
         const dims = this._allDimensions.filter(item => {
           const name = (item.name || item.id || '').toLowerCase()
@@ -658,16 +739,13 @@
         })
         body.innerHTML =
           '<div class="group-h">▼ Dimensions</div>' +
-          (dims.length ? dims.map(item => '<div class="row-item filter-source" data-id="' + this._esc(item.id) + '">' + clover + '<span>' + this._esc(item.name) + '</span></div>').join('') : '<div class="empty">No dimensions found.</div>') +
-          '<div class="group-h">▼ Measures</div>' +
-          '<div class="row-item filter-source" data-id="measures" data-kind="measures">' + ruler + '<span>Measures</span></div>'
+          (dims.length ? dims.map(item => '<div class="row-item filter-source" data-id="' + this._esc(item.id) + '">' + clover + '<span>' + this._esc(item.name) + '</span></div>').join('') : '<div class="empty">No dimensions found.</div>')
+        this._setFoot('<div class="apply-row"><button class="secondary" id="filter-cancel">Cancel</button></div>', foot => {
+          foot.querySelector('#filter-cancel').addEventListener('click', () => this._closePicker())
+        })
         body.querySelectorAll('.filter-source').forEach(row => {
           row.addEventListener('click', () => {
             const id = row.getAttribute('data-id')
-            if (id === 'measures') {
-              this._openFilterPicker({ id: 'measures', key: 'measures', name: 'Measures', kind: 'measures' })
-              return
-            }
             const item = this._allDimensions.find(entry => String(entry.id) === id || String(entry.key) === id) || { id, key: id, name: id }
             this._openFilterPicker(item)
           })
@@ -677,8 +755,7 @@
       if (this._pickerKind === 'filter') {
         const current = this._filterFor(this._filterItem) || { members: [] }
         const selected = current.members.map(item => String(item.id).toLowerCase())
-        const source = this._filterItem && this._filterItem.kind === 'measures' ? this._allMeasures : this._filterMembers
-        const filtered = source.filter(item => {
+        const filtered = this._filterMembers.filter(item => {
           const name = (item.name || item.id || '').toLowerCase()
           return !q || name.indexOf(q) !== -1
         })
@@ -690,43 +767,49 @@
               const checked = selected.indexOf(String(id).toLowerCase()) !== -1 ? ' checked' : ''
               return '<label class="row-item"><input type="checkbox" data-member="' + this._esc(id) + '" data-name="' + this._esc(item.name || id) + '"' + checked + ' /><span>' + this._esc(item.name || id) + '</span></label>'
             }).join('')
-            : '<div class="empty">Loading members… If this stays empty, the model has not returned members yet.</div>') +
-          '<div class="apply-row"><button class="secondary" id="filter-clear">Clear</button><button id="filter-apply">Apply Filter</button></div>'
-        const apply = this._shadowRoot.getElementById('filter-apply')
-        if (apply) {
-          apply.addEventListener('click', () => {
-            const members = Array.from(body.querySelectorAll('input[data-member]:checked')).map(box => ({
-              id: box.getAttribute('data-member'),
-              name: box.getAttribute('data-name')
-            }))
-            this._setFilter(this._filterItem, members)
-            this._closePicker()
-          })
-        }
-        const clear = this._shadowRoot.getElementById('filter-clear')
-        if (clear) {
-          clear.addEventListener('click', () => {
-            this._setFilter(this._filterItem, [])
-            this._closePicker()
-          })
-        }
+            : '<div class="empty">Loading members… If this stays empty, the model has not returned members yet.</div>')
+        this._setFoot(
+          '<div class="apply-row"><button class="secondary" id="filter-cancel">Cancel</button><button id="filter-apply">Apply Filter</button></div>',
+          foot => {
+            foot.querySelector('#filter-apply').addEventListener('click', () => {
+              const members = Array.from(body.querySelectorAll('input[data-member]:checked')).map(box => ({
+                id: box.getAttribute('data-member'),
+                name: box.getAttribute('data-name')
+              }))
+              this._setFilter(this._filterItem, members)
+              this._closePicker()
+            })
+            foot.querySelector('#filter-cancel').addEventListener('click', () => this._closePicker())
+          }
+        )
+        return
+      }
+      if (this._pickerKind === 'hierarchy') {
+        this._fillHierarchyDialog()
+        return
+      }
+      if (this._pickerKind === 'hierarchy-level') {
+        this._fillLevelDialog()
+        return
+      }
+      if (this._pickerKind === 'display') {
+        this._fillDisplayDialog()
         return
       }
       if (this._pickerKind === 'rename') {
         const option = this._dimOption(this._ctxItem)
         body.innerHTML =
-          '<div class="group-h">Rename</div>' +
-          '<input class="rename-input" id="rename-input" value="' + this._esc(option.rename || (this._ctxItem && this._ctxItem.name) || '') + '" />' +
-          '<div class="apply-row"><button id="rename-apply">OK</button></div>'
-        const input = this._shadowRoot.getElementById('rename-input')
-        const apply = this._shadowRoot.getElementById('rename-apply')
-        if (apply) {
-          apply.addEventListener('click', () => {
+          '<div class="dialog-title">Rename</div>' +
+          '<input class="rename-input" id="rename-input" value="' + this._esc(option.rename || (this._ctxItem && this._ctxItem.name) || '') + '" />'
+        this._setFoot('<div class="apply-row"><button class="secondary" id="rename-cancel">Cancel</button><button id="rename-apply">OK</button></div>', foot => {
+          const input = this._shadowRoot.getElementById('rename-input')
+          foot.querySelector('#rename-apply').addEventListener('click', () => {
             option.rename = (input.value || '').trim()
             this._emit('setDimOptions', { id: this._itemId(this._ctxItem), dimId: this._itemId(this._ctxItem), option })
             this._closePicker()
           })
-        }
+          foot.querySelector('#rename-cancel').addEventListener('click', () => this._closePicker())
+        })
         return
       }
       const used = this._pickerKind === 'measure'
@@ -758,6 +841,91 @@
           this._addItem(kind, item)
           this._closePicker()
         })
+      })
+    }
+
+    _fillHierarchyDialog () {
+      const body = this._shadowRoot.getElementById('pop-body')
+      const option = this._dimOption(this._ctxItem)
+      const list = [{ id: '', name: 'Flat Presentation' }].concat(this._hierarchies.filter(item => item.id))
+      const current = option.hierarchy || ''
+      body.innerHTML =
+        '<div class="dialog-title">Select Hierarchy</div>' +
+        '<div class="field-label">Hierarchy</div>' +
+        '<select class="select" id="hierarchy-select">' +
+          list.map(item => '<option value="' + this._esc(item.id) + '"' + (String(item.id) === String(current) ? ' selected' : '') + '>' + this._esc(item.name) + '</option>').join('') +
+        '</select>'
+      this._setFoot('<div class="apply-row"><button class="secondary" id="hierarchy-cancel">Cancel</button><button id="hierarchy-set">Set</button></div>', foot => {
+        foot.querySelector('#hierarchy-set').addEventListener('click', () => {
+          const select = this._shadowRoot.getElementById('hierarchy-select')
+          const id = select.value
+          const name = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : id
+          option.hierarchy = id
+          option.hierarchyName = name
+          if (!id) {
+            option.hierarchyLevel = ''
+          }
+          this._emit('setHierarchy', {
+            id: this._itemId(this._ctxItem),
+            dimId: this._itemId(this._ctxItem),
+            hierarchyId: id,
+            option
+          })
+          if (id) {
+            this._openDialog('hierarchy-level')
+          } else {
+            this._closePicker()
+          }
+        })
+        foot.querySelector('#hierarchy-cancel').addEventListener('click', () => this._closePicker())
+      })
+    }
+
+    _fillLevelDialog () {
+      const body = this._shadowRoot.getElementById('pop-body')
+      const option = this._dimOption(this._ctxItem)
+      const current = option.hierarchyLevel == null ? '' : String(option.hierarchyLevel)
+      const levels = [{ id: '', name: 'All Levels' }]
+      for (let i = 1; i <= 8; i++) {
+        levels.push({ id: String(i), name: 'Level ' + i })
+      }
+      body.innerHTML =
+        '<div class="dialog-title">Select Hierarchy Level</div>' +
+        '<div class="field-label">Hierarchy</div>' +
+        '<div>' + this._esc(option.hierarchyName || option.hierarchy || '') + '</div>' +
+        '<div class="field-label">Level</div>' +
+        '<select class="select" id="level-select">' +
+          levels.map(item => '<option value="' + this._esc(item.id) + '"' + (item.id === current ? ' selected' : '') + '>' + this._esc(item.name) + '</option>').join('') +
+        '</select>'
+      this._setFoot('<div class="apply-row"><button class="secondary" id="level-cancel">Cancel</button><button id="level-set">Set</button></div>', foot => {
+        foot.querySelector('#level-set').addEventListener('click', () => {
+          option.hierarchyLevel = this._shadowRoot.getElementById('level-select').value
+          this._emit('setDimOptions', { id: this._itemId(this._ctxItem), dimId: this._itemId(this._ctxItem), option })
+          this._closePicker()
+        })
+        foot.querySelector('#level-cancel').addEventListener('click', () => this._closePicker())
+      })
+    }
+
+    _fillDisplayDialog () {
+      const body = this._shadowRoot.getElementById('pop-body')
+      const option = this._dimOption(this._ctxItem)
+      const current = option.display || 'Description'
+      const choices = ['Description', 'ID', 'ID and Description']
+      body.innerHTML =
+        '<div class="dialog-title">Display Options</div>' +
+        choices.map(choice => {
+          const checked = choice === current ? ' checked' : ''
+          return '<label class="radio-row"><input type="radio" name="display-opt" value="' + this._esc(choice) + '"' + checked + ' /><span>' + this._esc(choice) + '</span></label>'
+        }).join('')
+      this._setFoot('<div class="apply-row"><button class="secondary" id="display-cancel">Cancel</button><button id="display-set">Set</button></div>', foot => {
+        foot.querySelector('#display-set').addEventListener('click', () => {
+          const selected = body.querySelector('input[name="display-opt"]:checked')
+          option.display = (selected && selected.value) || 'Description'
+          this._emit('setDimOptions', { id: this._itemId(this._ctxItem), dimId: this._itemId(this._ctxItem), option })
+          this._closePicker()
+        })
+        foot.querySelector('#display-cancel').addEventListener('click', () => this._closePicker())
       })
     }
 
@@ -813,7 +981,8 @@
       const root = this._shadowRoot.getElementById('root').getBoundingClientRect()
       const btn = fromBtn.getBoundingClientRect()
       sub.style.top = (btn.top - root.top) + 'px'
-      sub.style.left = (menu.getBoundingClientRect().right - root.left - 4) + 'px'
+      const menuLeft = menu.getBoundingClientRect().left - root.left
+      sub.style.left = Math.max(4, menuLeft - 220) + 'px'
       sub.classList.add('open')
     }
 
@@ -836,10 +1005,7 @@
       }
       if (act === 'rename') {
         this._closeCtx()
-        this._pickerKind = 'rename'
-        this._shadowRoot.getElementById('search-wrap').style.display = 'none'
-        this._fillPicker()
-        this._shadowRoot.getElementById('popover').classList.add('open')
+        this._openDialog('rename')
         return
       }
       if (act === 'properties') {
@@ -847,11 +1013,8 @@
         return
       }
       if (act === 'display') {
-        this._showSub(btn, [
-          { id: 'Description', name: 'Description' },
-          { id: 'ID', name: 'ID' },
-          { id: 'ID and Description', name: 'ID and Description' }
-        ], 'display')
+        this._closeCtx()
+        this._openDialog('display')
         return
       }
       if (act === 'visibility') {
@@ -863,9 +1026,10 @@
         return
       }
       if (act === 'hierarchy') {
-        this._hierarchies = [{ id: '', name: 'Flat presentation' }]
-        this._showHierarchySub(btn)
-        this._emit('loadHierarchies', { id: this._itemId(item), dimId: this._itemId(item) })
+        this._hierarchies = []
+        this._closeCtx()
+        this._openDialog('hierarchy')
+        this._request('loadHierarchies', { id: this._itemId(item), dimId: this._itemId(item) })
       }
     }
 
@@ -996,7 +1160,6 @@
       col.innerHTML =
         '<div class="measures-box zone" data-zone="measures">' +
           '<div class="measures-h">' + ruler + '<span class="label">Measures</span>' +
-          '<button class="tool" id="filter-measures" title="Filter">' + funnel + '</button>' +
           '<button class="x" id="remove-measures" title="Remove all measures">×</button></div>' +
           (measureChips || '<div class="hint">No measures. Nothing is kept by default.</div>') +
           '<button class="link" id="add-measure">' + plus + ' Add Measure</button>' +
@@ -1031,7 +1194,6 @@
       on('add-col-dim', () => this._openModelPicker('dimension', 'columns'))
       on('add-measure', () => this._openModelPicker('measure', 'measures'))
       on('add-filter', () => this._openAddFilter())
-      on('filter-measures', () => this._openFilterPicker({ id: 'measures', key: 'measures', name: 'Measures', kind: 'measures' }))
       on('remove-measures', () => this._clearMeasures())
       this._shadowRoot.querySelectorAll('.x[data-kind]').forEach(btn => {
         btn.addEventListener('click', event => {

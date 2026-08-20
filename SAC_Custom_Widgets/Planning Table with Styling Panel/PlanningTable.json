@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-5+F6IkaYz4iw29JSWMC10YlvRxqLZVq1YsAPKFNgDM0=",
+      "integrity": "sha256-pBgvQFqaT6mq5wTfxzMapM9kc00hWiejsIzfgwm5PO0=",
       "ignoreIntegrity": false
     },
     {
       "kind": "builder",
       "tag": "com-sap-sac-sample-planning-table-builder",
       "url": "/builder.js",
-      "integrity": "sha256-1NBU11XRkeyrV8tkJ0ANqtR8Ah4iBt6FPktDwcaX3wc=",
+      "integrity": "sha256-1geMsD/jmhRUPb4hheLMGN2bJZFDVF2i181iaLjp6zE=",
       "ignoreIntegrity": false
     },
     {

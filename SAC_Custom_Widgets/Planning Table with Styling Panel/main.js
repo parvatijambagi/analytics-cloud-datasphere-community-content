@@ -148,10 +148,17 @@
 
   const dimOption = (layout, dimension) => {
     const options = (layout && layout.dimOptions) || {}
-    const keys = [dimension && dimension.id, dimension && dimension.key, dimension && dimension.description]
+    const keys = [dimension && dimension.id, dimension && dimension.key, dimension && dimension.description, dimension && dimension.label]
     for (let i = 0; i < keys.length; i++) {
       if (keys[i] && options[keys[i]]) {
         return options[keys[i]]
+      }
+    }
+    const names = Object.keys(options)
+    for (let i = 0; i < names.length; i++) {
+      const option = options[names[i]]
+      if (option && dimension && String(names[i]).toLowerCase() === String(dimension.description || dimension.label || '').toLowerCase()) {
+        return option
       }
     }
     return null
@@ -159,13 +166,13 @@
 
   const cellId = (row, dimension) => {
     const cell = row[dimension.key]
-    return (cell && (cell.id || cell.label)) || ''
+    return (cell && (cell.id || cell.key || cell.label)) || ''
   }
 
   const cellLabel = (row, dimension, layout) => {
     const cell = row[dimension.key] || {}
-    const id = (cell.id || cell.label) || ''
-    const label = (cell.label || cell.id) || ''
+    const id = String(cell.id || cell.key || '')
+    const label = String(cell.label || cell.description || cell.text || '')
     const option = dimOption(layout, dimension)
     const display = (option && option.display) || 'Description'
     if (display === 'ID') {
@@ -174,6 +181,12 @@
     if (display === 'ID and Description') {
       if (id && label && id !== label) {
         return id + ' (' + label + ')'
+      }
+      if (id && !label) {
+        return id
+      }
+      if (label && !id) {
+        return label
       }
       return label || id
     }
@@ -266,23 +279,60 @@
   }
 
   const pickMeasures = (measures, layout) => {
-    let list = measures
     if (layout && layout.active) {
-      list = orderByLayout(measures, layout.measures)
-      const measureFilter = layout.filters && (layout.filters.measures || layout.filters.Measures)
-      const filtered = filterMembersOf(measureFilter)
-      if (filtered.length) {
-        const ids = filtered.map(item => String(item.id || item.name).toLowerCase())
-        const fromAxis = list.filter(item => ids.indexOf(String(item.id || '').toLowerCase()) !== -1 || ids.indexOf(String(item.key || '').toLowerCase()) !== -1 || ids.indexOf(String(item.label || '').toLowerCase()) !== -1)
-        if (fromAxis.length) {
-          return fromAxis
-        }
-        if (!layout.measures.length) {
-          return orderByLayout(measures, filtered)
-        }
+      return orderByLayout(measures, layout.measures)
+    }
+    return measures
+  }
+
+  const memberLevel = cell => {
+    if (!cell) {
+      return 1
+    }
+    if (cell.level !== undefined && cell.level !== null && cell.level !== '') {
+      const numeric = Number(cell.level)
+      if (Number.isFinite(numeric)) {
+        return numeric
       }
     }
-    return list
+    if (cell.hierarchyLevel !== undefined && cell.hierarchyLevel !== null && cell.hierarchyLevel !== '') {
+      const numeric = Number(cell.hierarchyLevel)
+      if (Number.isFinite(numeric)) {
+        return numeric
+      }
+    }
+    const id = String(cell.id || '')
+    if (id.indexOf('/') !== -1) {
+      return Math.max(1, id.split('/').filter(Boolean).length)
+    }
+    let depth = 1
+    let parent = cell.parentId
+    const seen = new Set()
+    while (parent && !seen.has(parent)) {
+      seen.add(parent)
+      depth += 1
+      parent = null
+    }
+    return depth
+  }
+
+  const applyHierarchyLevels = (data, dimensions, layout) => {
+    if (!layout || !layout.dimOptions) {
+      return data
+    }
+    return data.filter(row => {
+      return dimensions.every(dimension => {
+        const option = dimOption(layout, dimension)
+        if (!option || option.hierarchyLevel === '' || option.hierarchyLevel == null) {
+          return true
+        }
+        const max = Number(option.hierarchyLevel)
+        if (!Number.isFinite(max) || max <= 0) {
+          return true
+        }
+        return memberLevel(row[dimension.key]) <= max
+      })
+    })
   }
 
   const applyLayoutFilters = (data, dimensions, layout) => {
@@ -821,10 +871,14 @@
         return
       }
       try {
+        if (!members || !members.length) {
+          if (ds.removeDimensionFilter) {
+            await ds.removeDimensionFilter(dimId)
+          }
+          return
+        }
         if (ds.setDimensionFilter) {
-          await ds.setDimensionFilter(dimId, members && members.length ? members : undefined)
-        } else if (ds.removeDimensionFilter && (!members || !members.length)) {
-          await ds.removeDimensionFilter(dimId)
+          await ds.setDimensionFilter(dimId, members)
         }
       } catch (err) {
         console.error('Planning table filter failed', dimId, err)
@@ -864,9 +918,10 @@
         try {
           const raw = this._asList(await ds.getHierarchies(dimId))
           raw.forEach(item => {
-            const id = this._itemId(item)
+            const id = typeof item === 'string' ? item : this._itemId(item)
+            const name = typeof item === 'string' ? item : this._itemName(item, ds, 'dimension')
             if (id) {
-              hierarchies.push({ id, name: this._itemName(item, ds, 'dimension') })
+              hierarchies.push({ id, name: name || id })
             }
           })
         } catch (err) {
@@ -931,7 +986,10 @@
         } else if (cmd.op === 'clearMeasures') {
           await this._removeFeedItem(binding, 'measures', ids.length ? ids : (this._layout.measures || []).map(item => item.id || item.key))
         } else if (cmd.op === 'setFilter') {
-          await this._setDimensionFilter(cmd.dimId || cmd.id, cmd.members || [])
+          const dimId = cmd.dimId || cmd.id
+          if (dimId && String(dimId).toLowerCase() !== 'measures') {
+            await this._setDimensionFilter(dimId, cmd.members || [])
+          }
         } else if (cmd.op === 'loadMembers') {
           await this._loadFilterMembers(cmd.dimId || cmd.id)
         } else if (cmd.op === 'loadHierarchies') {
@@ -971,16 +1029,27 @@
     }
 
     _renderTable (dataBinding) {
-      const layout = this._layout && this._layout.active ? this._layout : parseLayout(this.builderLayoutJson)
+      const stored = parseLayout(this.builderLayoutJson)
+      const layout = (this._layout && this._layout.active) ? this._layout : stored
+      if (stored && stored.dimOptions) {
+        layout.dimOptions = Object.assign({}, stored.dimOptions, layout.dimOptions || {})
+      }
       const state = dataBinding && dataBinding.state
       let data = dataBinding && dataBinding.data
-      const metadata = dataBinding && dataBinding.metadata
+      let metadata = dataBinding && dataBinding.metadata
+      if (state === 'success' && data && data.length && metadata) {
+        this._lastGoodBinding = { data: data, metadata: metadata }
+      } else if (state === 'error' && this._lastGoodBinding) {
+        data = this._lastGoodBinding.data
+        metadata = this._lastGoodBinding.metadata
+      }
       const parsed = parseMetadata(metadata)
       const dimensions = parsed.dimensions
       const boundMeasures = parsed.measures
       const hasFeeds = dimensions.length > 0 && boundMeasures.length > 0
       const layoutActive = !!(layout && layout.active)
       const layoutEmpty = layoutActive && !layout.rows.length && !layout.columns.length && !layout.measures.length
+      const recovered = state === 'error' && !!(data && data.length)
 
       if (!dataBinding || state === 'loading' || !state) {
         this._tableWrap.innerHTML = setupMessage('Waiting for the data binding to finish loading.')
@@ -988,16 +1057,16 @@
         return
       }
 
-      if (layoutEmpty) {
+      if (layoutEmpty && !recovered) {
         this._tableWrap.innerHTML = setupMessage('Nothing is assigned. Use Builder to add dimensions and measures. Remove with × to drop them from the table.')
         this._renderToolbar()
         return
       }
 
-      if (state !== 'success' && !(data && metadata && (hasFeeds || layoutActive))) {
+      if (state !== 'success' && !recovered && !(data && metadata && (hasFeeds || layoutActive))) {
         this._tableWrap.innerHTML = setupMessage(
           state === 'error'
-            ? 'SAC reported a data-binding error. This usually means the model, Version, or feeds are not set yet.'
+            ? 'SAC reported a data-binding error. Check that a model is assigned and that Version is filtered if it is not on Rows or Columns. Then re-add dimensions and measures in Builder.'
             : `Binding state: ${this._escape(state)}.`
         )
         this._renderToolbar()
@@ -1021,6 +1090,7 @@
       const rowDims = pickRowDimensions(dimensions, colDims, layout)
       const measureList = pickMeasures(boundMeasures, layout)
       data = applyLayoutFilters(data, dimensions, layout)
+      data = applyHierarchyLevels(data, dimensions, layout)
 
       if (!data.length) {
         this._tableWrap.innerHTML = setupMessage('The current dimension filters exclude every row. Clear a filter in the Builder Filters section.')
