@@ -1,0 +1,22 @@
+{
+  "name": "SAC/DSP Community Content",
+  "install": "./.cursor/scripts/install.sh",
+  "start": "./.cursor/scripts/start.sh",
+  "ports": [
+    {
+      "name": "planning-table",
+      "port": 8080
+    },
+    {
+      "name": "file-upload-widget",
+      "port": 5173
+    }
+  ],
+  "terminals": [
+    {
+      "name": "file-upload-widget",
+      "command": "cd SAC_Custom_Widgets/file-upload-widget-master && npm run start",
+      "description": "Vite dev server and watch build for the React file upload custom widget on port 5173."
+    }
+  ]
+}
