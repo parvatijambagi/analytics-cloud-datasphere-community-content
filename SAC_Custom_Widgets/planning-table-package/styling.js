@@ -220,7 +220,7 @@
       <h3>Table</h3>
       <label for="columnDimension">Column dimensions</label>
       <select id="columnDimension">
-        <option value="Auto">Auto (Date, Version, Depthstructure)</option>
+        <option value="Auto">Auto (Date, GL-Accounts, Version)</option>
         <option value="Checked">Use checked dimensions below</option>
         <option value="None">None (all dimensions on rows)</option>
       </select>

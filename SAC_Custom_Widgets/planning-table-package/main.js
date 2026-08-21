@@ -49,7 +49,29 @@
 
   const isVersionDim = dimension => /version/.test(dimName(dimension).toLowerCase())
   const isDateDim = dimension => /date|time|month|period|year|calmonth|fiscal/.test(dimName(dimension).toLowerCase())
-  const isSelectorDim = dimension => isVersionDim(dimension) || isDateDim(dimension) || /depth|structure/.test(dimName(dimension).toLowerCase())
+  const isGlDim = dimension => /gl.?-?accounts?|glaccounts/.test(dimName(dimension).toLowerCase())
+  const isSelectorDim = dimension => isVersionDim(dimension) || isDateDim(dimension) || isGlDim(dimension) || /depth|structure/.test(dimName(dimension).toLowerCase())
+
+  const selectorRank = dimension => {
+    if (isDateDim(dimension)) return 0
+    if (isGlDim(dimension)) return 1
+    if (isVersionDim(dimension)) return 2
+    return 3
+  }
+
+  const sortSelectors = list => list.slice().sort((a, b) => selectorRank(a) - selectorRank(b))
+
+  const uniqueDims = list => {
+    const seen = new Set()
+    const out = []
+    ;(list || []).forEach(item => {
+      if (item && !seen.has(item.key)) {
+        seen.add(item.key)
+        out.push(item)
+      }
+    })
+    return out
+  }
 
   const pickColumnDimensions = (dimensions, metadata, columnDimension) => {
     if (!dimensions || !dimensions.length) {
@@ -57,38 +79,38 @@
     }
     const feeds = (metadata && metadata.feeds) || {}
     let tokens = collectFeedValues(feeds, ['columns', 'series', 'column', 'columnDimensions', 'color', 'dimensions2', 'categoryAxis2'])
-    if (!tokens.length) {
-      Object.keys(feeds).forEach(name => {
-        if (name === 'dimensions' || name === 'rows' || name === 'measures') {
-          return
+    Object.keys(feeds).forEach(name => {
+      const lower = String(name || '').toLowerCase()
+      if (lower === 'dimensions' || lower === 'rows' || lower === 'measures') {
+        return
+      }
+      collectFeedValues(feeds, [name]).forEach(item => {
+        if (tokens.indexOf(item) === -1) {
+          tokens.push(item)
         }
-        const feed = feeds[name]
-        if (feed && (feed.type === 'dimension' || (!feed.type && feed.values))) {
-          collectFeedValues(feeds, [name]).forEach(item => {
-            if (tokens.indexOf(item) === -1) {
-              tokens.push(item)
-            }
-          })
+      })
+    })
+    const fromFeed = uniqueDims(tokens.map(token => matchDimension(dimensions, token)))
+    const requested = String(columnDimension == null ? 'Auto' : columnDimension).trim()
+    if (requested === 'None') {
+      return sortSelectors(fromFeed)
+    }
+    let list = fromFeed.slice()
+    if (requested === 'Auto' || requested === '') {
+      dimensions.filter(isSelectorDim).forEach(dimension => {
+        if (list.every(item => item.key !== dimension.key)) {
+          list.push(dimension)
+        }
+      })
+    } else if (requested !== 'Checked') {
+      requested.split(',').forEach(part => {
+        const item = matchDimension(dimensions, part.trim())
+        if (item && list.every(existing => existing.key !== item.key)) {
+          list.push(item)
         }
       })
     }
-    const fromFeed = tokens.map(token => matchDimension(dimensions, token)).filter(Boolean)
-    if (fromFeed.length) {
-      return fromFeed
-    }
-    const requested = String(columnDimension || 'Auto').trim()
-    if (!requested || requested === 'None') {
-      return []
-    }
-    if (requested !== 'Auto') {
-      return requested.split(',').map(part => matchDimension(dimensions, part.trim())).filter(Boolean)
-    }
-    const auto = dimensions.filter(isSelectorDim)
-    auto.sort((a, b) => {
-      const rank = dimension => isDateDim(dimension) ? 0 : (isVersionDim(dimension) ? 1 : 2)
-      return rank(a) - rank(b)
-    })
-    return auto
+    return sortSelectors(list)
   }
 
   const pickRowDimensions = (dimensions, metadata, colDims) => {
@@ -111,8 +133,8 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add row members such as ARE to <em>Rows</em>.</li>
-          <li>Add Date, Version, or Depthstructure in Builder. They appear as selector rows under Measures, with the current member and a dropdown, like a native table.</li>
+          <li>Add ARE to <em>Rows</em>.</li>
+          <li>Add Date, GL-Accounts, and Version to <em>Columns</em>. They appear under Measures as selector rows (Date → (all), GL-Accounts → H1_Top, Version → Actual), not as extra row columns.</li>
           <li>Add measures such as Global Currency and Local Currency to <em>Measures</em>.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
         </ol>
@@ -646,7 +668,7 @@
         const selected = selectedMember(dimension)
         const selectedLabel = (members.find(item => item.id === selected) || {}).label || '(all)'
         table += '<tr class="selector">'
-        table += `<th class="selector">${this._escape(dimName(dimension))}<span class="chev">▸</span></th>`
+        table += `<th class="selector">${this._escape(dimName(dimension))}<span class="chev">›</span></th>`
         if (rowDims.length > 1) {
           rowDims.slice(1).forEach(() => {
             table += '<th class="selector"></th>'
@@ -661,9 +683,9 @@
               const isSel = item.id === selected ? ' selected' : ''
               table += `<option value="${this._escape(item.id)}"${isSel}>${this._escape(item.label || item.id || '(all)')}</option>`
             })
-            table += '</select><span class="chev">▸</span>'
+            table += '</select><span class="chev">›</span>'
           } else {
-            table += `<span class="member-link">${this._escape(selectedLabel)}</span><span class="chev">▸</span>`
+            table += `<span class="member-link">${this._escape(selectedLabel)}</span><span class="chev">›</span>`
           }
           table += '</td>'
         })
