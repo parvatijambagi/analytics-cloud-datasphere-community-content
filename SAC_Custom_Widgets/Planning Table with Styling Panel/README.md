@@ -9,9 +9,10 @@ Custom widgets can **read** planning data through data binding. They cannot call
 | File | Role |
 | --- | --- |
 | `PlanningTable.json` | Widget contribution to upload in SAC |
-| `PlanningTable.zip` | Resource archive (`main-v13.js` + `styling-v13.js`) prompted after the JSON |
+| `PlanningTable.zip` | Resource archive (`main-v13.js` + `builder-v13.js` + `styling-v13.js`) prompted after the JSON |
 | `index.json` | Same contribution as `PlanningTable.json` (source copy) |
 | `main.js` | Editable planning table web component (packed in the ZIP as `main-v13.js`) |
+| `builder.js` | Builder panel: Table Type (Cross-Tab / Forecast Layout) and Forecast options (packed as `builder-v13.js`) |
 | `styling.js` | Styling panel (packed in the ZIP as `styling-v13.js`) |
 
 A copy without spaces in the path (easier to download from GitHub): `../planning-table-package/` (`PlanningTable.json` + `PlanningTable.zip`).
@@ -26,11 +27,11 @@ This is the SAC resource-upload flow. You do not host the JavaScript files yours
 4. Confirm the widget **Planning Table 1.3** appears in the list (this is a new widget id, not an in-place update of 1.2.x).
 5. Open or create an **Optimized Story**, insert **Planning Table 1.3**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
 
-The ZIP must keep `main-v13.js` and `styling-v13.js` at the archive root. Those names match the relative URLs in the JSON.
+The ZIP must keep `main-v13.js`, `styling-v13.js`, and `builder-v13.js` at the archive root. Those names match the relative URLs in the JSON.
 
 If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-**Re-upload JSON + ZIP** after this change (widget version **1.3.2**). After a correct install the toolbar shows **v1.3.2**. Column dimensions stack under Measures. Row dimensions such as ARE and Cost Center show as row headers under that stack, matching the native SAC table.
+**Re-upload JSON + ZIP** after this change (widget version **1.3.3**). After a correct install the toolbar shows **v1.3.3**. In **Builder**, use **Table Type** to choose Cross-Tab (current stacked header) or **Forecast Layout**. Forecast Layout shows Look Back On, Look Ahead On, Cut-Over Date, Timeframe, Calculation, and Additional Versions; all dropdowns are filled from the bound model and can be changed, then **Apply**.
 
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 

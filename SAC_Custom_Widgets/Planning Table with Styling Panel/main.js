@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.2'
+  const WIDGET_VERSION = '1.3.3'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -186,6 +186,58 @@
       return mapped.filter(dimension => !colKeys.has(dimension.key))
     }
     return dimensions.filter(dimension => !colKeys.has(dimension.key))
+  }
+
+  const parseLooseDate = value => {
+    const text = String(value || '').trim()
+    if (!text) {
+      return null
+    }
+    const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) {
+      return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+    }
+    const ymd = text.match(/\b(\d{4})(\d{2})(\d{2})\b/)
+    if (ymd) {
+      return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+    }
+    const yq = text.match(/(\d{4})\D*Q(\d)/i)
+    if (yq) {
+      return new Date(Number(yq[1]), (Number(yq[2]) - 1) * 3, 1)
+    }
+    const ym = text.match(/(\d{4})[.\/-](\d{1,2})\b/)
+    if (ym) {
+      return new Date(Number(ym[1]), Number(ym[2]) - 1, 1)
+    }
+    const year = text.match(/\b(20\d{2}|19\d{2})\b/)
+    if (year) {
+      return new Date(Number(year[1]), 0, 1)
+    }
+    const parsed = new Date(text)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const resolveCutOver = setting => {
+    const text = String(setting || 'Today')
+    if (!text || /^today/i.test(text) || /^current period/i.test(text)) {
+      return new Date()
+    }
+    return parseLooseDate(text) || new Date()
+  }
+
+  const memberDate = member => parseLooseDate((member && member.label) || '') || parseLooseDate((member && member.id) || '')
+
+  const isForecastLookBack = (member, cutover) => {
+    const date = memberDate(member)
+    if (!date) {
+      return true
+    }
+    return date.getTime() < cutover.getTime()
+  }
+
+  const versionNameOf = (list, token) => {
+    const item = (list || []).find(entry => String(entry.id) === String(token) || String(entry.label) === String(token) || String(entry.name) === String(token))
+    return item ? (item.label || item.name || item.id) : (token || '')
   }
 
   const setupMessage = extra => {
@@ -632,8 +684,13 @@
       const data = dataBinding && dataBinding.data
       const metadata = dataBinding && dataBinding.metadata
       const { dimensions, measures } = parseMetadata(metadata)
-      const selectorDims = pickColumnDimensions(dimensions, metadata, this.columnDimension, dataBinding)
-      const rowDims = pickRowDimensions(dimensions, metadata, selectorDims, dataBinding)
+      let selectorDims = pickColumnDimensions(dimensions, metadata, this.columnDimension, dataBinding)
+      let rowDims = pickRowDimensions(dimensions, metadata, selectorDims, dataBinding)
+      if (this.swapAxes === true || this.swapAxes === 'true') {
+        const swapped = selectorDims
+        selectorDims = rowDims
+        rowDims = swapped
+      }
       const hasFeeds = (rowDims.length > 0 || selectorDims.length > 0) && measures.length > 0
 
       if (!dataBinding || state === 'loading' || !state) {
@@ -664,8 +721,6 @@
         return
       }
 
-      this._dimensions = rowDims.concat(selectorDims)
-      this._measures = measures
       if (!this._dimFilters) {
         this._dimFilters = {}
       }
@@ -700,6 +755,59 @@
         }
         view = view.filter(row => ((row[dimension.key] && row[dimension.key].id) || '') === selected)
       })
+
+      const forecastMode = String(this.tableType || 'Cross-Tab') === 'Forecast'
+      const dateDim = selectorDims.concat(rowDims).find(isDateDim) || null
+      const versionDim = selectorDims.concat(rowDims).find(isVersionDim) || null
+      let extraVersions = []
+      try {
+        const parsed = JSON.parse(this.additionalVersionsJson || '[]')
+        extraVersions = Array.isArray(parsed) ? parsed.filter(Boolean).map(String) : []
+      } catch (ignore) {
+        extraVersions = []
+      }
+      let stackedDims = selectorDims.slice()
+      let leafColumns = measures.map(measure => ({ measure, date: null, versionId: '', versionLabel: '', key: measure.key }))
+      if (forecastMode && dateDim) {
+        stackedDims = selectorDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
+        rowDims = rowDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
+        const cutover = resolveCutOver(this.cutOverDate)
+        const dateMembers = membersOf(dateDim).filter(item => item.id).slice().sort((a, b) => {
+          const left = memberDate(a)
+          const right = memberDate(b)
+          if (left && right) {
+            return left.getTime() - right.getTime()
+          }
+          return String(a.label || a.id).localeCompare(String(b.label || b.id))
+        })
+        const lookBackId = this.lookBackOn || ''
+        const lookAheadId = this.lookAheadOn || ''
+        const versionMembers = versionDim ? membersOf(versionDim) : []
+        leafColumns = []
+        dateMembers.forEach(date => {
+          const primaryId = isForecastLookBack(date, cutover) ? lookBackId : lookAheadId
+          const versionIds = [primaryId].concat(extraVersions).filter((id, index, list) => id && list.indexOf(id) === index)
+          if (!versionIds.length) {
+            versionIds.push('')
+          }
+          versionIds.forEach(versionId => {
+            measures.forEach(measure => {
+              leafColumns.push({
+                measure,
+                date,
+                versionId,
+                versionLabel: versionNameOf(versionMembers, versionId) || versionId || '(all)',
+                key: [date.id, versionId, measure.key].join('|')
+              })
+            })
+          })
+        })
+        if (!leafColumns.length) {
+          leafColumns = measures.map(measure => ({ measure, date: null, versionId: '', versionLabel: '', key: measure.key }))
+        }
+      }
+      this._dimensions = rowDims.concat(stackedDims)
+      this._measures = measures
 
       const headerBg = this.headerBackground || '#0854A0'
       const headerFg = this.headerTextColor || '#FFFFFF'
@@ -740,26 +848,42 @@
         }
       })
 
-      const totals = measures.map(() => 0)
+      const totals = leafColumns.map(() => 0)
       const rowHeaderCount = Math.max(rowDims.length, 1)
       const axisLabel = (label, extraClass, extraStyle) => {
         return `<th class="${extraClass || 'axis-label'}" colspan="${rowHeaderCount}" style="${cellChrome};text-align:right;${extraStyle || ''}">${label}</th>`
       }
       let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
+      if (forecastMode && dateDim && leafColumns.some(column => column.date)) {
+        table += '<tr class="selector">'
+        table += axisLabel(this._escape(dimName(dateDim)) + '<span class="chev">›</span>', 'axis-label selector')
+        leafColumns.forEach(column => {
+          table += `<td class="selector"><span class="member-link">${this._escape(column.date.label || column.date.id)}</span><span class="chev">›</span></td>`
+        })
+        table += '</tr>'
+        if (versionDim) {
+          table += '<tr class="selector">'
+          table += axisLabel(this._escape(dimName(versionDim)), 'axis-label selector')
+          leafColumns.forEach(column => {
+            table += `<td class="selector"><span class="member-link">${this._escape(column.versionLabel)}</span></td>`
+          })
+          table += '</tr>'
+        }
+      }
       table += '<tr class="axis">'
       table += axisLabel('Measures')
-      measures.forEach(measure => {
-        table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
+      leafColumns.forEach(column => {
+        table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(column.measure.label || column.measure.description || column.measure.id || column.measure.key)}</th>`
       })
       table += '</tr>'
-      selectorDims.forEach(dimension => {
+      stackedDims.forEach(dimension => {
         const members = membersOf(dimension)
         const selected = selectedMember(dimension)
         const showChevron = !isVersionDim(dimension) || members.length > 1
         const chev = showChevron ? '<span class="chev">›</span>' : ''
         table += '<tr class="selector">'
         table += axisLabel(`${this._escape(dimName(dimension))}${chev}`, 'axis-label selector')
-        measures.forEach(() => {
+        leafColumns.forEach(() => {
           table += '<td class="selector">'
           table += `<select class="member-link" data-dim="${this._escape(dimension.key)}" aria-label="${this._escape(dimName(dimension))}">`
           table += '<option value="">(all)</option>'
@@ -783,11 +907,33 @@
       } else {
         table += `<th class="row-dim-name" style="${cellChrome}"></th>`
       }
-      measures.forEach(() => {
+      leafColumns.forEach(() => {
         table += `<th class="measure-bar" style="${cellChrome}"></th>`
       })
       table += '</tr>'
       table += '</thead><tbody>'
+
+      const findBound = (row, column) => {
+        if (!column.date) {
+          return row[column.measure.key] || {}
+        }
+        const rKey = rowKey(row, rowDims)
+        const match = view.find(item => {
+          if (rowKey(item, rowDims) !== rKey) {
+            return false
+          }
+          const dateId = (item[dateDim.key] && item[dateDim.key].id) || ''
+          if (dateId !== column.date.id) {
+            return false
+          }
+          if (!versionDim || !column.versionId) {
+            return true
+          }
+          const cell = item[versionDim.key] || {}
+          return cell.id === column.versionId || cell.label === column.versionId
+        })
+        return (match && match[column.measure.key]) || {}
+      }
 
       rowTuples.forEach((row, rowIndex) => {
         table += '<tr>'
@@ -799,14 +945,14 @@
         if (!rowDims.length) {
           table += `<td class="dim" style="${cellChrome}"></td>`
         }
-        measures.forEach((measure, measureIndex) => {
-          const bound = row[measure.key] || {}
+        leafColumns.forEach((column, columnIndex) => {
+          const bound = findBound(row, column)
           const original = bound.raw
-          const key = changeKey(row, rowDims, measure.key)
+          const key = changeKey(row, rowDims, column.measure.key) + '||' + column.key
           const pending = this._pending.get(key)
           const current = pending ? pending.value : original
           if (typeof current === 'number' && !Number.isNaN(current)) {
-            totals[measureIndex] += current
+            totals[columnIndex] += current
           }
           const isChanged = !!pending
           const display = formatNumber(current, formatOpts, bound.formatted)
@@ -815,8 +961,8 @@
           const measureRule = firstMatchingRule(rules, measureKind)
           const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
           if (editable) {
-            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
-            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(measure.key)}" />`
+            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
+            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" />`
             table += '</td>'
           } else {
             table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
@@ -846,7 +992,7 @@
         select.addEventListener('change', () => {
           const dimKey = select.getAttribute('data-dim')
           this._dimFilters[dimKey] = select.value
-          const dimension = selectorDims.find(item => item.key === dimKey)
+          const dimension = stackedDims.find(item => item.key === dimKey)
           this._applyDimensionFilter(dimension, select.value)
           this.render()
         })
@@ -859,7 +1005,7 @@
         })
         input.addEventListener('blur', () => {
           this._editing = false
-          this._commitInput(input, rowTuples, rowDims.concat(selectorDims), measures, decimalPlaces, view, [])
+          this._commitInput(input, rowTuples, rowDims.concat(stackedDims), measures, decimalPlaces, view, [dateDim, versionDim].filter(Boolean))
         })
         input.addEventListener('keydown', event => {
           if (event.key === 'Enter') {
@@ -905,9 +1051,22 @@
         return
       }
       let source = row
-      if (colDims && colDims.length) {
+      if (colDims && colDims.length && colKey) {
         const rKey = rowKey(row, rowDims)
-        source = data.find(item => rowKey(item, rowDims) === rKey && colDims.map(dimension => (item[dimension.key] && item[dimension.key].id) || '').join('|') === colKey) || row
+        const parts = String(colKey).split('|')
+        source = data.find(item => {
+          if (rowKey(item, rowDims) !== rKey) {
+            return false
+          }
+          return colDims.every((dimension, index) => {
+            const expected = parts[index] || ''
+            if (!expected) {
+              return true
+            }
+            const cell = item[dimension.key] || {}
+            return cell.id === expected || cell.label === expected
+          })
+        }) || row
       }
       const bound = source[measure.key] || {}
       const original = bound.raw
