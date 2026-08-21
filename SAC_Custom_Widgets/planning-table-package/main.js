@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.3'
+  const WIDGET_VERSION = '1.3.4'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -612,6 +612,10 @@
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
       }
+      if (changedProps && changedProps.builderCommand) {
+        this._runBuilderCommand(changedProps.builderCommand)
+      }
+      this._publishCatalog()
       if (!this._editing) {
         this.render()
       }
@@ -644,6 +648,136 @@
       this.readOnly = !!value
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: { properties: { readOnly: this.readOnly } }
+      }))
+    }
+
+    _feedBinding () {
+      try {
+        if (this.dataBindings && this.dataBindings.getDataBinding) {
+          return this.dataBindings.getDataBinding('dataBinding')
+        }
+      } catch (ignore) {}
+      return null
+    }
+
+    _publishCatalog () {
+      const binding = this._feedBinding()
+      let dims = []
+      let measures = []
+      try {
+        const ds = binding && binding.getDataSource && binding.getDataSource()
+        if (ds && ds.getDimensions) {
+          dims = [].concat(ds.getDimensions() || [])
+        }
+        if (ds && ds.getMeasures) {
+          measures = [].concat(ds.getMeasures() || [])
+        }
+        if (ds && ds.getMainStructureMembers && !measures.length) {
+          measures = [].concat(ds.getMainStructureMembers() || [])
+        }
+      } catch (ignore) {}
+      const dimJson = JSON.stringify(dims)
+      const measJson = JSON.stringify(measures)
+      if (dimJson === this.availableDimensionsJson && measJson === this.availableMeasuresJson) {
+        return
+      }
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { availableDimensionsJson: dimJson, availableMeasuresJson: measJson } }
+      }))
+    }
+
+    _mapFeed (feed) {
+      if (feed === 'columns') {
+        return 'dimensions2'
+      }
+      if (feed === 'rows') {
+        return 'dimensions'
+      }
+      return feed || 'dimensions'
+    }
+
+    async _runBuilderCommand (raw) {
+      if (!raw || this._runningCommand) {
+        return
+      }
+      let cmd
+      try {
+        cmd = JSON.parse(raw)
+      } catch (ignore) {
+        return
+      }
+      if (!cmd || !cmd.op || cmd.op === 'noop') {
+        return
+      }
+      const binding = this._feedBinding()
+      if (!binding && cmd.op !== 'swapAxes') {
+        return
+      }
+      this._runningCommand = true
+      const feed = this._mapFeed(cmd.feed)
+      const id = cmd.id
+      try {
+        const ds = binding && binding.getDataSource && binding.getDataSource()
+        if (cmd.op === 'addDimension' && id && binding.addDimensionToFeed) {
+          await binding.addDimensionToFeed(feed, id)
+        } else if (cmd.op === 'addMeasure' && id) {
+          if (binding.addMemberToFeed) {
+            await binding.addMemberToFeed('measures', id)
+          }
+        } else if (cmd.op === 'remove' && id) {
+          if (feed === 'measures') {
+            if (binding.removeMemberFromFeed) {
+              await binding.removeMemberFromFeed('measures', id)
+            } else if (binding.removeMember) {
+              await binding.removeMember('measures', id)
+            }
+          } else if (binding.removeDimensionFromFeed) {
+            await binding.removeDimensionFromFeed(feed, id)
+          } else if (binding.removeDimension) {
+            await binding.removeDimension(id)
+          }
+        } else if (cmd.op === 'setFilter' && ds && ds.setDimensionFilter && cmd.feed) {
+          if (id) {
+            await ds.setDimensionFilter(cmd.feed, id)
+          }
+        } else if (cmd.op === 'removeFilter' && ds && cmd.feed) {
+          if (ds.removeDimensionFilter) {
+            await ds.removeDimensionFilter(cmd.feed)
+          } else if (ds.setDimensionFilter) {
+            await ds.setDimensionFilter(cmd.feed, [])
+          }
+        } else if (cmd.op === 'swapAxes' && binding) {
+          const metadata = (this._resolveDataBinding() && this._resolveDataBinding().metadata) || {}
+          const feeds = (metadata.feeds || {})
+          const rowVals = ((feeds.dimensions && feeds.dimensions.values) || []).slice()
+          const colVals = ((feeds.dimensions2 && feeds.dimensions2.values) || (feeds.columns && feeds.columns.values) || []).slice()
+          for (const token of rowVals) {
+            if (binding.removeDimensionFromFeed) {
+              await binding.removeDimensionFromFeed('dimensions', token)
+            }
+          }
+          for (const token of colVals) {
+            if (binding.removeDimensionFromFeed) {
+              await binding.removeDimensionFromFeed('dimensions2', token)
+            }
+          }
+          for (const token of colVals) {
+            if (binding.addDimensionToFeed) {
+              await binding.addDimensionToFeed('dimensions', token)
+            }
+          }
+          for (const token of rowVals) {
+            if (binding.addDimensionToFeed) {
+              await binding.addDimensionToFeed('dimensions2', token)
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Planning table builder command failed', cmd, err)
+      }
+      this._runningCommand = false
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { builderCommand: '{"op":"noop"}' } }
       }))
     }
 
@@ -780,9 +914,9 @@
           }
           return String(a.label || a.id).localeCompare(String(b.label || b.id))
         })
-        const lookBackId = this.lookBackOn || ''
-        const lookAheadId = this.lookAheadOn || ''
         const versionMembers = versionDim ? membersOf(versionDim) : []
+        const lookBackId = this.lookBackOn || (versionMembers.find(item => /actual/i.test(String(item.label || item.id))) || versionMembers[0] || {}).id || ''
+        const lookAheadId = this.lookAheadOn || (versionMembers.find(item => item.id !== lookBackId) || versionMembers[0] || {}).id || lookBackId
         leafColumns = []
         dateMembers.forEach(date => {
           const primaryId = isForecastLookBack(date, cutover) ? lookBackId : lookAheadId
