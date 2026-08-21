@@ -1,4 +1,5 @@
 (function () {
+  const WIDGET_VERSION = '1.3.0'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -320,6 +321,11 @@
         border-bottom: 1px solid #e5e5e5;
         background: #f5f6f7;
         flex: 0 0 auto;
+      }
+      .toolbar .version {
+        font-size: 11px;
+        font-weight: 700;
+        color: #0854a0;
       }
       .toolbar .status {
         margin-left: auto;
@@ -842,6 +848,7 @@
       const count = this._pending.size
       const locked = !!this.readOnly
       this._toolbar.innerHTML = `
+        <span class="version">v${WIDGET_VERSION}</span>
         <button id="btn-submit" ${count && !locked ? '' : 'disabled'}>Submit</button>
         <button id="btn-revert" class="secondary" ${count ? '' : 'disabled'}>Revert</button>
         <span class="status">${locked ? 'Read only' : (count ? count + ' unpublished change' + (count === 1 ? '' : 's') : 'No unpublished changes')}</span>
@@ -865,7 +872,7 @@
     }
   }
 
-  if (!customElements.get('com-sap-sac-sample-planning-table')) {
-    customElements.define('com-sap-sac-sample-planning-table', PlanningTable)
+  if (!customElements.get('com-sap-sac-sample-planning-table-v13')) {
+    customElements.define('com-sap-sac-sample-planning-table-v13', PlanningTable)
   }
 })()

@@ -2,27 +2,27 @@
   "eula": "",
   "vendor": "SAP",
   "license": "",
-  "id": "com.sap.sac.sample.planning.table",
+  "id": "com.sap.sac.sample.planning.table.v13",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.2.5",
+  "version": "1.3.0",
   "supportsMobile": true,
   "supportsBookmark": true,
-  "name": "Planning Table",
-  "newInstancePrefix": "PlanningTable",
+  "name": "Planning Table 1.3",
+  "newInstancePrefix": "PlanningTable13",
   "description": "A sample custom planning table with editable measure cells, change highlighting, and events for story-script write-back",
   "webcomponents": [
     {
       "kind": "main",
-      "tag": "com-sap-sac-sample-planning-table",
-      "url": "/main.js",
-      "integrity": "sha256-TQU3ep12J5q4fnO9TGWyugOeJSKVyIVHOMazScOvwf8=",
+      "tag": "com-sap-sac-sample-planning-table-v13",
+      "url": "/main-v13.js",
+      "integrity": "sha256-0dIOGALc3ADBJ/Cis8rBYwbZ5mVNnoSZGuyvBz7svpA=",
       "ignoreIntegrity": true
     },
     {
       "kind": "styling",
-      "tag": "com-sap-sac-sample-planning-table-styling",
-      "url": "/styling.js",
-      "integrity": "sha256-jcsuy5+r0REh6F7syynnT5VAVdsU7GiMi0ipMfUr74A=",
+      "tag": "com-sap-sac-sample-planning-table-styling-v13",
+      "url": "/styling-v13.js",
+      "integrity": "sha256-nhWZORonrhykLxhEV/05UDVMOo+mMHLoeQLJ6rPQ9pU=",
       "ignoreIntegrity": true
     }
   ],

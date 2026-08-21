@@ -9,10 +9,10 @@ Custom widgets can **read** planning data through data binding. They cannot call
 | File | Role |
 | --- | --- |
 | `PlanningTable.json` | Widget contribution to upload in SAC |
-| `PlanningTable.zip` | Resource archive (`main.js` + `styling.js`) prompted after the JSON |
+| `PlanningTable.zip` | Resource archive (`main-v13.js` + `styling-v13.js`) prompted after the JSON |
 | `index.json` | Same contribution as `PlanningTable.json` (source copy) |
-| `main.js` | Editable planning table web component |
-| `styling.js` | Styling panel (colors, decimals, totals, read-only) |
+| `main.js` | Editable planning table web component (packed in the ZIP as `main-v13.js`) |
+| `styling.js` | Styling panel (packed in the ZIP as `styling-v13.js`) |
 
 A copy without spaces in the path (easier to download from GitHub): `../planning-table-package/` (`PlanningTable.json` + `PlanningTable.zip`).
 
@@ -23,14 +23,14 @@ This is the SAC resource-upload flow. You do not host the JavaScript files yours
 1. In SAP Analytics Cloud, open **Custom Widgets** (from the story or analytic application area; you need permission to add widgets).
 2. Click **+** / **Upload** and select **`PlanningTable.json`**.
 3. When SAC asks for the **resource file**, upload **`PlanningTable.zip`**.
-4. Confirm the widget **Planning Table** appears in the list.
-5. Open or create an **Optimized Story**, insert **Planning Table**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
+4. Confirm the widget **Planning Table 1.3** appears in the list (this is a new widget id, not an in-place update of 1.2.x).
+5. Open or create an **Optimized Story**, insert **Planning Table 1.3**, and in the Builder panel assign a **planning model**, then row dimensions and measures or accounts.
 
-The ZIP must keep `main.js` and `styling.js` at the archive root. Those names match the relative URLs in the JSON (`/main.js`, `/styling.js`).
+The ZIP must keep `main-v13.js` and `styling-v13.js` at the archive root. Those names match the relative URLs in the JSON.
 
-If you change `main.js` or `styling.js`, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
+If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-Re-upload as version **1.2.5** (or remove the old widget first). SAC keeps the previous JSON until the version number changes.
+**You must delete the previous Planning Table custom widget** (id `com.sap.sac.sample.planning.table`, versions 1.1.x–1.2.x) before uploading **1.3.0**. SAC caches the old `main.js` and will not replace a custom element that is already registered. After a correct install the toolbar shows **v1.3.0**, and the first header cell is **Measures** (not ARE / Date / Version). If you still see ARE | Cost Center | Date | Version as one blue header row, the old widget is still running.
 
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 
