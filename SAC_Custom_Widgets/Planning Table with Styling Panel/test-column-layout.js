@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate layout helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, parseLooseDate, resolveCutOver, isForecastLookBack }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, parseLooseDate, resolveCutOver, isForecastLookBack, inForecastWindow }\n')()
 
 const metadata = {
   dimensions: {
@@ -66,6 +66,9 @@ if (!api.isForecastLookBack(q1, cut) || api.isForecastLookBack(q4, cut)) {
 }
 if (api.resolveCutOver('Today').getFullYear() !== new Date().getFullYear()) {
   throw new Error('Today cut-over should resolve to the current year')
+}
+if (!api.inForecastWindow(q1, cut, { range: 'Year', lookBackAdditional: 0, lookBackUnit: 'Year', lookAheadAdditional: 0, lookAheadUnit: 'Year' })) {
+  throw new Error('Q1 2026 should stay inside the current-year forecast window')
 }
 
 console.log('column layout tests passed')

@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.4'
+  const WIDGET_VERSION = '1.3.5'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -233,6 +233,41 @@
       return true
     }
     return date.getTime() < cutover.getTime()
+  }
+
+  const shiftDate = (date, amount, unit) => {
+    const next = new Date(date.getTime())
+    const n = Number(amount) || 0
+    const key = String(unit || 'Year').toLowerCase()
+    if (key === 'day') next.setDate(next.getDate() + n)
+    else if (key === 'week') next.setDate(next.getDate() + n * 7)
+    else if (key === 'month') next.setMonth(next.getMonth() + n)
+    else if (key === 'quarter') next.setMonth(next.getMonth() + n * 3)
+    else next.setFullYear(next.getFullYear() + n)
+    return next
+  }
+
+  const startOfRange = (date, range) => {
+    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const key = String(range || 'Year').toLowerCase()
+    if (key === 'month') return new Date(next.getFullYear(), next.getMonth(), 1)
+    if (key === 'quarter') return new Date(next.getFullYear(), Math.floor(next.getMonth() / 3) * 3, 1)
+    return new Date(next.getFullYear(), 0, 1)
+  }
+
+  const endOfRange = (date, range) => {
+    const start = startOfRange(date, range)
+    return shiftDate(start, 1, range)
+  }
+
+  const inForecastWindow = (member, cutover, settings) => {
+    const date = memberDate(member)
+    if (!date) {
+      return true
+    }
+    const start = shiftDate(startOfRange(cutover, settings.range), -(Number(settings.lookBackAdditional) || 0), settings.lookBackUnit)
+    const end = shiftDate(endOfRange(cutover, settings.range), Number(settings.lookAheadAdditional) || 0, settings.lookAheadUnit)
+    return date.getTime() >= start.getTime() && date.getTime() < end.getTime()
   }
 
   const versionNameOf = (list, token) => {
@@ -915,10 +950,18 @@
           return String(a.label || a.id).localeCompare(String(b.label || b.id))
         })
         const versionMembers = versionDim ? membersOf(versionDim) : []
-        const lookBackId = this.lookBackOn || (versionMembers.find(item => /actual/i.test(String(item.label || item.id))) || versionMembers[0] || {}).id || ''
-        const lookAheadId = this.lookAheadOn || (versionMembers.find(item => item.id !== lookBackId) || versionMembers[0] || {}).id || lookBackId
+        const lookBackId = this.lookBackOn || (versionMembers.find(item => /actual/i.test(String(item.label || item.id))) || versionMembers[0] || { id: 'Actual' }).id || 'Actual'
+        const lookAheadId = this.lookAheadOn || (versionMembers.find(item => /epmplusa|forecast|plan/i.test(String(item.label || item.id)) && item.id !== lookBackId) || versionMembers.find(item => item.id !== lookBackId) || { id: 'EPMplusA' }).id || 'EPMplusA'
+        const windowed = dateMembers.filter(item => inForecastWindow(item, cutover, {
+          range: this.timeframeRange || 'Year',
+          lookBackAdditional: this.lookBackAdditional,
+          lookBackUnit: this.lookBackAdditionalUnit || 'Year',
+          lookAheadAdditional: this.lookAheadAdditional,
+          lookAheadUnit: this.lookAheadAdditionalUnit || 'Year'
+        }))
+        const visibleDates = windowed.length ? windowed : dateMembers
         leafColumns = []
-        dateMembers.forEach(date => {
+        visibleDates.forEach(date => {
           const primaryId = isForecastLookBack(date, cutover) ? lookBackId : lookAheadId
           const versionIds = [primaryId].concat(extraVersions).filter((id, index, list) => id && list.indexOf(id) === index)
           if (!versionIds.length) {

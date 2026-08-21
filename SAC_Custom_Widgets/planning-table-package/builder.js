@@ -34,7 +34,7 @@
         cursor: pointer;
         user-select: none;
       }
-      .section-h .icon {
+      .section-h .icon, .forecast-head .icon {
         width: 18px;
         height: 18px;
         margin-right: 8px;
@@ -65,7 +65,53 @@
         background: #fff;
         box-sizing: border-box;
       }
-      .type-row select { flex: 1; }
+      .type-dd {
+        position: relative;
+        flex: 1;
+      }
+      .type-btn, .type-opt {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        height: 32px;
+        border: 1px solid #d9d9d9;
+        background: #fff;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        padding: 0 8px;
+        box-sizing: border-box;
+      }
+      .type-btn { border-radius: 4px; }
+      .type-caret { margin-left: auto; color: #6a6d70; }
+      .type-menu {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 34px;
+        background: #fff;
+        border: 1px solid #d9d9d9;
+        box-shadow: 0 4px 12px rgba(0,0,0,.12);
+        z-index: 5;
+      }
+      .type-opt { border: 0; height: 36px; }
+      .type-opt:hover, .type-opt.active { background: #e8f2fe; outline: 1px dotted #0854a0; outline-offset: -2px; }
+      .type-ic { width: 16px; height: 16px; fill: #6a6d70; flex: 0 0 16px; }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+      .forecast-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        padding: 4px 0 8px;
+      }
       button.swap, button.step {
         border: 1px solid #d9d9d9;
         background: #fff;
@@ -169,16 +215,33 @@
       <div class="section">
         <div class="label">Table Type</div>
         <div class="type-row">
-          <select id="tableType">
-            <option value="Cross-Tab">Cross-Tab</option>
-            <option value="Forecast">Forecast Layout</option>
-          </select>
+          <div class="type-dd">
+            <button type="button" class="type-btn" id="tableTypeBtn" aria-haspopup="listbox">
+              <svg class="type-ic" id="tableTypeIcon" viewBox="0 0 16 16"><path d="M2 2h12v12H2V2zm1.2 1.2v2.4h9.6V3.2H3.2zm0 3.6v2.4h9.6V6.8H3.2zm0 3.6V12h9.6v-1.6H3.2z"/></svg>
+              <span id="tableTypeLabel">Cross-Tab</span>
+              <span class="type-caret">▾</span>
+            </button>
+            <div class="type-menu hidden" id="tableTypeMenu">
+              <button type="button" class="type-opt active" data-value="Cross-Tab">
+                <svg class="type-ic" viewBox="0 0 16 16"><path d="M2 2h12v12H2V2zm1.2 1.2v2.4h9.6V3.2H3.2zm0 3.6v2.4h9.6V6.8H3.2zm0 3.6V12h9.6v-1.6H3.2z"/></svg>
+                Cross-Tab
+              </button>
+              <button type="button" class="type-opt" data-value="Forecast">
+                <svg class="type-ic" viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm.75 3v2.7l1.9 1.9-.75.75L7.5 8.2V4.5h1.25z"/></svg>
+                Forecast Layout
+              </button>
+            </div>
+            <select id="tableType" class="sr-only">
+              <option value="Cross-Tab">Cross-Tab</option>
+              <option value="Forecast">Forecast Layout</option>
+            </select>
+          </div>
           <button class="swap" id="swap-axes" title="Swap axes">⇅</button>
         </div>
       </div>
       <div id="forecast-panel" class="hidden">
         <div class="section">
-          <div class="section-h">
+          <div class="forecast-head">
             <svg class="icon" viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm.75 3v2.7l1.9 1.9-.75.75L7.5 8.2V4.5h1.25z"/></svg>
             Forecast Layout
           </div>
@@ -275,6 +338,7 @@
       this._filters = []
       this._allDimensions = []
       this._allMeasures = []
+      this._suppressLive = false
       this._bound = this._bindUi()
     }
 
@@ -291,13 +355,27 @@
           el.querySelector('.chevron').textContent = hidden ? '▼' : '▶'
         })
       })
-      byId('tableType').addEventListener('change', () => {
-        this._toggleForecast()
-        if (byId('tableType').value === 'Forecast') {
+      byId('tableTypeBtn').addEventListener('click', event => {
+        event.stopPropagation()
+        this._shadowRoot.getElementById('tableTypeMenu').classList.toggle('hidden')
+      })
+      this._shadowRoot.getElementById('tableTypeMenu').querySelectorAll('.type-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this._setTableType(btn.getAttribute('data-value'))
+          this._shadowRoot.getElementById('tableTypeMenu').classList.add('hidden')
+          this._toggleForecast()
           this._apply()
-        } else {
-          this._emit({ tableType: 'Cross-Tab' })
-        }
+        })
+      })
+      this._shadowRoot.addEventListener('click', () => {
+        this._shadowRoot.getElementById('tableTypeMenu').classList.add('hidden')
+      })
+      ;['lookBackOn', 'lookAheadOn', 'cutOverDate', 'timeframeType', 'timeframeGranularity', 'timeframeRange', 'lookBackAdditionalUnit', 'lookAheadAdditionalUnit', 'sumFor'].forEach(id => {
+        byId(id).addEventListener('change', () => {
+          if (!this._suppressLive && byId('tableType').value === 'Forecast') {
+            this._apply()
+          }
+        })
       })
       byId('swap-axes').addEventListener('click', () => {
         const next = !(this.swapAxes === true || this.swapAxes === 'true')
@@ -308,6 +386,9 @@
         const input = byId(id)
         const value = Math.max(0, (Number(input.value) || 0) + delta)
         input.value = String(value)
+        if (!this._suppressLive && byId('tableType').value === 'Forecast') {
+          this._apply()
+        }
       }
       byId('lookBackMinus').addEventListener('click', () => step('lookBackAdditional', -1))
       byId('lookBackPlus').addEventListener('click', () => step('lookBackAdditional', 1))
@@ -332,6 +413,21 @@
         this._loadFromProps()
       }
       this._renderFeeds()
+    }
+
+    _setTableType (value) {
+      const type = value === 'Forecast' ? 'Forecast' : 'Cross-Tab'
+      this._shadowRoot.getElementById('tableType').value = type
+      this._shadowRoot.getElementById('tableTypeLabel').textContent = type === 'Forecast' ? 'Forecast Layout' : 'Cross-Tab'
+      this._shadowRoot.getElementById('tableTypeMenu').querySelectorAll('.type-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-value') === type)
+      })
+      const icon = this._shadowRoot.getElementById('tableTypeIcon')
+      if (type === 'Forecast') {
+        icon.innerHTML = '<path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm.75 3v2.7l1.9 1.9-.75.75L7.5 8.2V4.5h1.25z"/>'
+      } else {
+        icon.innerHTML = '<path d="M2 2h12v12H2V2zm1.2 1.2v2.4h9.6V3.2H3.2zm0 3.6v2.4h9.6V6.8H3.2zm0 3.6V12h9.6v-1.6H3.2z"/>'
+      }
     }
 
     _toggleForecast () {
@@ -465,7 +561,12 @@
       const versionDim = Object.keys(dims).map(key => Object.assign({ key }, dims[key])).find(dim => /version/i.test(String(dim.description || dim.label || dim.id || dim.key)))
       const dateDim = Object.keys(dims).map(key => Object.assign({ key }, dims[key])).find(dim => /date|time|month|period|year|calmonth|fiscal/i.test(String(dim.description || dim.label || dim.id || dim.key)))
 
-      this._versions = []
+      this._versions = [
+        { id: 'Actual', name: 'Actual' },
+        { id: 'EPMplusA', name: 'EPMplusA' },
+        { id: 'Budget', name: 'Budget' },
+        { id: 'Forecast', name: 'Forecast' }
+      ]
       this._dates = [{ id: 'Today', name: this._todayLabel() }, { id: 'Current Period', name: 'Current Period' }]
       if (versionDim) {
         data.forEach(row => this._merge(this._versions, [row[versionDim.key] || row[versionDim.id]]))
@@ -480,6 +581,7 @@
           if (result && typeof result.then === 'function') {
             result.then(resolved => {
               this._merge(target, this._toArray(resolved))
+              this._loadFromProps()
               this._renderFeeds()
             }).catch(() => {})
           } else {
@@ -671,6 +773,9 @@
         this._fillMemberSelect(select, this._versions, value, 'Select version')
         select.addEventListener('change', () => {
           this._draftExtra[index] = select.value
+          if (!this._suppressLive && this._val('tableType') === 'Forecast') {
+            this._apply()
+          }
         })
         const remove = document.createElement('button')
         remove.type = 'button'
@@ -698,10 +803,11 @@
     }
 
     _loadFromProps () {
+      this._suppressLive = true
       const tableType = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
-      this._shadowRoot.getElementById('tableType').value = tableType
+      this._setTableType(tableType)
       this._fillMemberSelect(this._shadowRoot.getElementById('lookBackOn'), this._versions, this.lookBackOn || 'Actual')
-      this._fillMemberSelect(this._shadowRoot.getElementById('lookAheadOn'), this._versions, this.lookAheadOn)
+      this._fillMemberSelect(this._shadowRoot.getElementById('lookAheadOn'), this._versions, this.lookAheadOn || 'EPMplusA')
       this._fillMemberSelect(this._shadowRoot.getElementById('cutOverDate'), this._dates, this.cutOverDate || 'Today')
       fillStatic(this._shadowRoot.getElementById('timeframeType'), TIMEFRAME_TYPES, this.timeframeType || 'Forecast')
       fillStatic(this._shadowRoot.getElementById('timeframeGranularity'), GRANULARITIES, this.timeframeGranularity || 'Quarter')
@@ -714,6 +820,7 @@
       this._draftExtra = this._parseExtra(this.additionalVersionsJson)
       this._renderExtra()
       this._toggleForecast()
+      this._suppressLive = false
     }
 
     _emit (properties) {
