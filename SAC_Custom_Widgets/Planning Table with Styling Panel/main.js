@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.1'
+  const WIDGET_VERSION = '1.3.2'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -196,7 +196,7 @@
           <li>Use an <em>Optimized Story</em> (not Classic).</li>
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
-          <li>Add ARE to <em>Rows</em>.</li>
+          <li>Add ARE and Cost Center to <em>Rows</em>. Their names appear as row headers under the stacked column dimensions.</li>
           <li>Add Date, GL-Accounts, and Version to <em>Columns</em>. They stack under Measures as header rows (Date → (all), GL-Accounts → H1_Top, Version → Actual) across each measure column, not as extra row columns next to ARE.</li>
           <li>Add measures such as Global Currency and Local Currency to <em>Measures</em>.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
@@ -429,8 +429,7 @@
         vertical-align: middle;
       }
       th {
-        position: sticky;
-        top: 0;
+        position: static;
         z-index: 1;
         font-weight: 600;
       }
@@ -440,17 +439,33 @@
       td.dim {
         background: #f8f9fa;
       }
+      thead tr.axis th.axis-label,
+      thead tr.selector th.axis-label {
+        text-align: right;
+        font-weight: 700;
+        background: #fff;
+        color: #32363a;
+      }
       tr.selector th, tr.selector td {
         position: static;
         background: #fff;
         color: #32363a;
         font-weight: 700;
-        text-align: left;
+        text-align: right;
         border-bottom: 1px solid #d9d9d9;
       }
-      thead tr.selector:last-of-type th,
-      thead tr.selector:last-of-type td {
-        border-bottom: 3px solid #32363a;
+      thead tr.row-headers th.row-dim-name {
+        position: static;
+        text-align: left;
+        font-weight: 700;
+        background: #fff;
+        color: #32363a;
+        border-bottom: 1px solid #1d2d3e;
+      }
+      thead tr.row-headers th.measure-bar {
+        position: static;
+        background: #fff;
+        border-bottom: 4px solid #4a5a6a;
       }
       select.member-link,
       span.member-link {
@@ -727,14 +742,12 @@
 
       const totals = measures.map(() => 0)
       const rowHeaderCount = Math.max(rowDims.length, 1)
-      let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
-      table += '<tr>'
-      table += `<th style="${cellChrome};text-align:${hAlign}">Measures</th>`
-      if (rowDims.length > 1) {
-        rowDims.slice(1).forEach(() => {
-          table += `<th style="${cellChrome}"></th>`
-        })
+      const axisLabel = (label, extraClass, extraStyle) => {
+        return `<th class="${extraClass || 'axis-label'}" colspan="${rowHeaderCount}" style="${cellChrome};text-align:right;${extraStyle || ''}">${label}</th>`
       }
+      let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
+      table += '<tr class="axis">'
+      table += axisLabel('Measures')
       measures.forEach(measure => {
         table += `<th class="measure" style="${cellChrome};text-align:right">${this._escape(measure.label || measure.description || measure.id || measure.key)}</th>`
       })
@@ -745,12 +758,7 @@
         const showChevron = !isVersionDim(dimension) || members.length > 1
         const chev = showChevron ? '<span class="chev">›</span>' : ''
         table += '<tr class="selector">'
-        table += `<th class="selector">${this._escape(dimName(dimension))}${chev}</th>`
-        if (rowDims.length > 1) {
-          rowDims.slice(1).forEach(() => {
-            table += '<th class="selector"></th>'
-          })
-        }
+        table += axisLabel(`${this._escape(dimName(dimension))}${chev}`, 'axis-label selector')
         measures.forEach(() => {
           table += '<td class="selector">'
           table += `<select class="member-link" data-dim="${this._escape(dimension.key)}" aria-label="${this._escape(dimName(dimension))}">`
@@ -767,6 +775,18 @@
         })
         table += '</tr>'
       })
+      table += '<tr class="row-headers">'
+      if (rowDims.length) {
+        rowDims.forEach(dimension => {
+          table += `<th class="row-dim-name" style="${cellChrome};text-align:${hAlign}">${this._escape(dimName(dimension))}</th>`
+        })
+      } else {
+        table += `<th class="row-dim-name" style="${cellChrome}"></th>`
+      }
+      measures.forEach(() => {
+        table += `<th class="measure-bar" style="${cellChrome}"></th>`
+      })
+      table += '</tr>'
       table += '</thead><tbody>'
 
       rowTuples.forEach((row, rowIndex) => {
@@ -817,7 +837,7 @@
       table += '</table>'
 
       this._tableWrap.innerHTML = table
-      this._tableWrap.querySelectorAll('thead tr:first-child th').forEach(cell => {
+      this._tableWrap.querySelectorAll('thead tr.axis th.measure').forEach(cell => {
         cell.style.background = headerBg
         cell.style.color = headerFg
       })

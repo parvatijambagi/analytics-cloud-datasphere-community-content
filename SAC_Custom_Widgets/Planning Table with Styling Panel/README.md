@@ -30,11 +30,11 @@ The ZIP must keep `main-v13.js` and `styling-v13.js` at the archive root. Those 
 
 If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-**Re-upload JSON + ZIP** after this change (widget version **1.3.1**). After a correct install the toolbar shows **v1.3.1**. Dimensions added in **Columns** (Date, GL-Accounts, Version) stack under Measures as header rows, the same way as a native SAC table. Row dimensions such as ARE stay on the left. If Date / Version / GL-Accounts still appear as extra columns next to ARE, the previous ZIP is still loaded.
+**Re-upload JSON + ZIP** after this change (widget version **1.3.2**). After a correct install the toolbar shows **v1.3.2**. Column dimensions stack under Measures. Row dimensions such as ARE and Cost Center show as row headers under that stack, matching the native SAC table.
 
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 
-- **Rows** — dimensions such as ARE
+- **Rows** — ARE, Cost Center (row header names under the stacked column dimensions)
 - **Columns** — Date, Version, GL-Accounts (stacked header rows under Measures)
 - **Measures** — measures or accounts
 
