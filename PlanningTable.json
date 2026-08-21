@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table.v13",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table 1.3",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table-v13",
       "url": "/main-v13.js",
-      "integrity": "sha256-a/a6+42rDwuBu0ABcWZKT7ZU0/p+Qb0aiXLHymlIr8Q=",
+      "integrity": "sha256-tcRU0S/HTrp7lYRwQYwyt8U+uBGVW/Dprtzma6F7M28=",
       "ignoreIntegrity": true
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling-v13",
       "url": "/styling-v13.js",
-      "integrity": "sha256-o0uSUj7t/R3VMBFFN7bpMNDKWsw2PLI1T//ln1L7lgo=",
+      "integrity": "sha256-x+H3Bqp+58pcdXQlYNuWZ6uLbfQvfvQOVERVUNpw91s=",
       "ignoreIntegrity": true
     }
   ],
@@ -193,7 +193,12 @@
     "cutOverDate": {
       "type": "string",
       "default": "Today",
-      "description": "Forecast cut-over date"
+      "description": "Forecast cut-over date or selected Date dimension member"
+    },
+    "cutOverMode": {
+      "type": "string",
+      "default": "Today",
+      "description": "Today, SpecificDate, or LastBooked"
     },
     "timeframeType": {
       "type": "string",
@@ -238,7 +243,7 @@
     "additionalVersionsJson": {
       "type": "string",
       "default": "[]",
-      "description": "JSON list of additional forecast versions"
+      "description": "JSON list of additional forecast versions: [{ version, deltaBasedOn }]"
     },
     "swapAxes": {
       "type": "boolean",

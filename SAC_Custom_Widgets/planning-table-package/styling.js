@@ -112,7 +112,55 @@
       .stepper select { flex: 1; }
       .footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
       .cancel { border: 0; background: none; font: inherit; cursor: pointer; }
-      .link { border: 0; background: none; color: #0854a0; font: inherit; font-weight: 600; cursor: pointer; padding: 8px 0; }
+      button.link {
+        display: block;
+        margin-top: 6px;
+        border: 0;
+        background: none;
+        padding: 0;
+        color: #0854a0;
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .forecast-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        margin: 12px 0 8px;
+      }
+      .forecast-head svg { width: 16px; height: 16px; fill: #0854a0; }
+      .tf-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .extra-head, .extra-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 24px;
+        gap: 8px;
+        align-items: center;
+      }
+      .extra-head {
+        color: #6a6d70;
+        font-size: 11px;
+        margin-top: 8px;
+      }
+      .extra-row select { width: 100%; }
+      .x {
+        border: 0;
+        background: none;
+        color: #0854a0;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      .menu-sep {
+        border-top: 1px solid #d9d9d9;
+        margin-top: 4px;
+        padding-top: 4px;
+        color: #0854a0;
+      }
     </style>
     <div id="root">
       <div class="tabs">
@@ -129,22 +177,35 @@
           <button type="button" class="swap" id="swap-axes" title="Swap axes">⇅</button>
         </div>
         <div id="forecast-panel" class="hidden">
-          <h3>Forecast Layout</h3>
+          <div class="forecast-head">
+            <svg viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm.75 3v2.7l1.9 1.9-.75.75L7.5 8.2V4.5h1.25z"/></svg>
+            Forecast Layout
+          </div>
           <h3>Layout</h3>
-          <label for="lookBackOn">Look Back On</label>
+          <label for="lookBackOn">Look Back On:</label>
           <select id="lookBackOn"></select>
-          <label for="lookAheadOn">Look Ahead On</label>
+          <label for="lookAheadOn">Look Ahead On:</label>
           <select id="lookAheadOn"></select>
-          <label for="cutOverDate">Cut-Over Date</label>
-          <select id="cutOverDate"></select>
-          <h3>Timeframe</h3>
-          <label for="timeframeType">Type</label>
+          <label for="cutOverMode">Cut-Over Date:</label>
+          <select id="cutOverMode">
+            <option value="Today">Today</option>
+            <option value="SpecificDate">Specific Date...</option>
+            <option value="LastBooked">Last Booked (Actuals)</option>
+          </select>
+          <div id="specific-date-wrap" class="hidden">
+            <label for="specificDate">Date dimension</label>
+            <select id="specificDate"></select>
+          </div>
+          <button type="button" class="link" id="new-input-control">New Calculation Input Control...</button>
+          <p class="hint" id="cutover-hint"></p>
+          <h3 class="tf-head">Timeframe</h3>
+          <label for="timeframeType">Type:</label>
           <select id="timeframeType">
             <option>Forecast</option>
             <option>Rolling Forecast</option>
             <option>Calendar</option>
           </select>
-          <label for="timeframeGranularity">Granularity</label>
+          <label for="timeframeGranularity">Granularity:</label>
           <select id="timeframeGranularity">
             <option>Day</option>
             <option>Week</option>
@@ -152,13 +213,13 @@
             <option selected>Quarter</option>
             <option>Year</option>
           </select>
-          <label for="timeframeRange">Range</label>
+          <label for="timeframeRange">Range:</label>
           <select id="timeframeRange">
             <option>Month</option>
             <option>Quarter</option>
             <option selected>Year</option>
           </select>
-          <label>Look Back Additional</label>
+          <label>Look Back Additional:</label>
           <div class="stepper">
             <button type="button" class="step" id="lookBackMinus">−</button>
             <input id="lookBackAdditional" type="text" value="0" />
@@ -167,7 +228,7 @@
               <option>Day</option><option>Week</option><option>Month</option><option>Quarter</option><option selected>Year</option>
             </select>
           </div>
-          <label>Look Ahead Additional</label>
+          <label>Look Ahead Additional:</label>
           <div class="stepper">
             <button type="button" class="step" id="lookAheadMinus">−</button>
             <input id="lookAheadAdditional" type="text" value="0" />
@@ -179,12 +240,13 @@
           <h3>Calculation</h3>
           <label for="sumFor">Sum For:</label>
           <select id="sumFor">
-            <option>None</option>
-            <option>Cut-Over Period</option>
-            <option>Cut-Over Quarter</option>
             <option selected>Cut-Over Year</option>
+            <option>All</option>
+            <option>Look Ahead</option>
+            <option>None</option>
           </select>
           <h3>Additional Versions</h3>
+          <div class="extra-head"><span>Version</span><span>Delta Based On</span><span></span></div>
           <div id="extra-versions"></div>
           <button type="button" class="link" id="add-version">+ Add Version</button>
           <div class="footer">
@@ -396,8 +458,11 @@
           detail: { properties: { swapAxes: !(this.swapAxes === true || this.swapAxes === 'true') } }
         }))
       })
-      ;['lookBackOn', 'lookAheadOn', 'cutOverDate', 'timeframeType', 'timeframeGranularity', 'timeframeRange', 'lookBackAdditionalUnit', 'lookAheadAdditionalUnit', 'sumFor'].forEach(id => {
+      ;['lookBackOn', 'lookAheadOn', 'cutOverMode', 'specificDate', 'timeframeType', 'timeframeGranularity', 'timeframeRange', 'lookBackAdditionalUnit', 'lookAheadAdditionalUnit', 'sumFor'].forEach(id => {
         byId(id).addEventListener('change', () => {
+          if (id === 'cutOverMode') {
+            this._syncCutOverUi()
+          }
           if (byId('tableType').value === 'Forecast') {
             this._applyTableType()
           }
@@ -415,8 +480,18 @@
       byId('lookAheadMinus').addEventListener('click', () => step('lookAheadAdditional', -1))
       byId('lookAheadPlus').addEventListener('click', () => step('lookAheadAdditional', 1))
       byId('add-version').addEventListener('click', () => {
-        this._draftExtra.push(this._versions[0] ? this._versions[0].id : '')
+        this._draftExtra.push({
+          version: this._versions[0] ? this._versions[0].id : '',
+          deltaBasedOn: 'Forecast Layout'
+        })
         this._renderExtra()
+        if (byId('tableType').value === 'Forecast') {
+          this._applyTableType()
+        }
+      })
+      byId('new-input-control').addEventListener('click', () => {
+        this._shadowRoot.getElementById('cutover-hint').textContent =
+          'Custom widgets cannot create SAC Calculation Input Controls. Create one in the story, or use Specific Date to pick a Date dimension member.'
       })
       this._renderRules()
     }
@@ -523,19 +598,46 @@
 
     _renderExtra () {
       const host = this._shadowRoot.getElementById('extra-versions')
+      if (!host) {
+        return
+      }
       host.innerHTML = ''
-      this._draftExtra.forEach((value, index) => {
+      const deltaItems = [{ id: 'Forecast Layout', name: 'Forecast Layout' }].concat(this._versions || [])
+      this._draftExtra.forEach((row, index) => {
+        const item = row && typeof row === 'object' ? row : { version: String(row || ''), deltaBasedOn: 'Forecast Layout' }
         const wrap = document.createElement('div')
-        wrap.className = 'row'
-        const select = document.createElement('select')
-        this._fillMemberSelect(select, this._versions, value)
-        select.addEventListener('change', () => {
-          this._draftExtra[index] = select.value
+        wrap.className = 'extra-row'
+        const versionSelect = document.createElement('select')
+        this._fillMemberSelect(versionSelect, this._versions, item.version)
+        versionSelect.addEventListener('change', () => {
+          this._draftExtra[index].version = versionSelect.value
           if (this._val('tableType') === 'Forecast') {
             this._applyTableType()
           }
         })
-        wrap.appendChild(select)
+        const deltaSelect = document.createElement('select')
+        this._fillMemberSelect(deltaSelect, deltaItems, item.deltaBasedOn || 'Forecast Layout')
+        deltaSelect.addEventListener('change', () => {
+          this._draftExtra[index].deltaBasedOn = deltaSelect.value
+          if (this._val('tableType') === 'Forecast') {
+            this._applyTableType()
+          }
+        })
+        const del = document.createElement('button')
+        del.type = 'button'
+        del.className = 'x'
+        del.textContent = '×'
+        del.title = 'Remove version'
+        del.addEventListener('click', () => {
+          this._draftExtra.splice(index, 1)
+          this._renderExtra()
+          if (this._val('tableType') === 'Forecast') {
+            this._applyTableType()
+          }
+        })
+        wrap.appendChild(versionSelect)
+        wrap.appendChild(deltaSelect)
+        wrap.appendChild(del)
         host.appendChild(wrap)
       })
     }
@@ -546,18 +648,189 @@
       return 'Today (' + months[now.getMonth()] + ' ' + now.getDate() + ', ' + now.getFullYear() + ')'
     }
 
+    _resolvedCutOverMode () {
+      const stored = String(this.cutOverMode || '')
+      if (stored === 'Today' || stored === 'SpecificDate' || stored === 'LastBooked') {
+        return stored
+      }
+      const date = String(this.cutOverDate || '')
+      if (/last booked/i.test(date)) {
+        return 'LastBooked'
+      }
+      if (date && !/^today/i.test(date) && !/^current period/i.test(date)) {
+        return 'SpecificDate'
+      }
+      return 'Today'
+    }
+
+    _syncCutOverUi () {
+      const modeEl = this._shadowRoot.getElementById('cutOverMode')
+      if (!modeEl) {
+        return
+      }
+      const todayOpt = modeEl.querySelector('option[value="Today"]')
+      if (todayOpt) {
+        todayOpt.textContent = this._todayLabel()
+      }
+      const wrap = this._shadowRoot.getElementById('specific-date-wrap')
+      if (wrap) {
+        wrap.classList.toggle('hidden', modeEl.value !== 'SpecificDate')
+      }
+      const hint = this._shadowRoot.getElementById('cutover-hint')
+      if (!hint) {
+        return
+      }
+      if (modeEl.value === 'LastBooked') {
+        hint.textContent = 'Uses the latest Date member in the bound result set for the Look Back (Actuals) version.'
+      } else if (modeEl.value === 'SpecificDate') {
+        hint.textContent = (this._dates || []).length
+          ? 'Choose a member from the Date dimension of the selected model.'
+          : 'Bind a Date dimension in Builder so members appear here.'
+      } else {
+        hint.textContent = ''
+      }
+    }
+
+    _dimSearch (dim) {
+      return [dim && dim.id, dim && dim.description, dim && dim.label, dim && dim.key].filter(Boolean).join(' ').toLowerCase()
+    }
+
+    _bindingDims () {
+      const binding = this.dataBinding || {}
+      const dims = ((binding.metadata || {}).dimensions) || {}
+      return Object.keys(dims).map(key => Object.assign({ key, id: dims[key] && dims[key].id ? dims[key].id : key }, dims[key]))
+    }
+
+    _normalizeMember (item) {
+      if (!item) {
+        return null
+      }
+      if (typeof item === 'string') {
+        return { id: item, name: item }
+      }
+      const id = item.id || item.Id || item.memberId
+      if (id == null || id === '') {
+        return null
+      }
+      return { id: String(id), name: String(item.description || item.label || item.name || id) }
+    }
+
+    _mergeMembers (base, extra) {
+      const seen = new Map()
+      ;(base || []).concat(extra || []).forEach(item => {
+        const normalized = this._normalizeMember(item)
+        if (!normalized) {
+          return
+        }
+        if (!seen.has(normalized.id)) {
+          seen.set(normalized.id, normalized)
+        }
+      })
+      return Array.from(seen.values())
+    }
+
+    _membersFromData (dim) {
+      const data = (this.dataBinding && this.dataBinding.data) || []
+      const seen = new Map()
+      data.forEach(row => {
+        const cell = (row && (row[dim.key] || row[dim.id])) || {}
+        const id = cell.id != null ? cell.id : (typeof cell === 'string' ? cell : '')
+        if (!id) {
+          return
+        }
+        const name = cell.label || cell.description || String(id)
+        if (!seen.has(String(id))) {
+          seen.set(String(id), { id: String(id), name: String(name) })
+        }
+      })
+      return Array.from(seen.values())
+    }
+
+    _loadMembersFromDataSource (dimensionId) {
+      try {
+        const getBinding = this.dataBindings && this.dataBindings.getDataBinding
+        const binding = getBinding ? this.dataBindings.getDataBinding('dataBinding') : null
+        const ds = binding && binding.getDataSource && binding.getDataSource()
+        if (!ds || typeof ds.getMembers !== 'function') {
+          return Promise.resolve([])
+        }
+        return Promise.resolve(ds.getMembers(dimensionId)).then(members => {
+          return (members || []).map(item => this._normalizeMember(item)).filter(Boolean)
+        }).catch(() => [])
+      } catch (ignore) {
+        return Promise.resolve([])
+      }
+    }
+
+    _refreshForecastSelects () {
+      this._fillMemberSelect(this._shadowRoot.getElementById('lookBackOn'), this._versions, this.lookBackOn || this._val('lookBackOn') || 'Actual')
+      this._fillMemberSelect(this._shadowRoot.getElementById('lookAheadOn'), this._versions, this.lookAheadOn || this._val('lookAheadOn') || 'EPMplusA')
+      this._fillMemberSelect(this._shadowRoot.getElementById('specificDate'), this._dates, this.cutOverDate || this._val('specificDate'))
+      this._renderExtra()
+      this._syncCutOverUi()
+    }
+
+    _loadModelCatalog () {
+      const fallbackVersions = [
+        { id: 'Actual', name: 'Actual' },
+        { id: 'EPMplusA', name: 'EPMplusA' },
+        { id: 'Budget', name: 'Budget' },
+        { id: 'Forecast', name: 'Forecast' },
+        { id: 'BDG', name: 'BDG' }
+      ]
+      const dims = this._bindingDims()
+      const versionDim = dims.find(dim => /version/.test(this._dimSearch(dim)))
+      const dateDim = dims.find(dim => /date|time|month|period|year|calmonth|fiscal/.test(this._dimSearch(dim)))
+      this._versions = this._mergeMembers(fallbackVersions, versionDim ? this._membersFromData(versionDim) : [])
+      this._dates = dateDim ? this._membersFromData(dateDim) : (this._dates || [])
+      this._refreshForecastSelects()
+      const versionId = versionDim && (versionDim.id || versionDim.key)
+      const dateId = dateDim && (dateDim.id || dateDim.key)
+      Promise.all([
+        versionId ? this._loadMembersFromDataSource(versionId) : Promise.resolve([]),
+        dateId ? this._loadMembersFromDataSource(dateId) : Promise.resolve([])
+      ]).then(results => {
+        const versions = results[0]
+        const dates = results[1]
+        if (versions && versions.length) {
+          this._versions = this._mergeMembers(this._versions, versions)
+        }
+        if (dates && dates.length) {
+          this._dates = this._mergeMembers(this._dates, dates)
+        }
+        this._refreshForecastSelects()
+      })
+    }
+
+    _parseExtra (json) {
+      try {
+        const parsed = JSON.parse(json || '[]')
+        if (!Array.isArray(parsed)) {
+          return []
+        }
+        return parsed.map(item => {
+          if (item && typeof item === 'object') {
+            return {
+              version: String(item.version || item.id || ''),
+              deltaBasedOn: String(item.deltaBasedOn || 'Forecast Layout')
+            }
+          }
+          return { version: String(item || ''), deltaBasedOn: 'Forecast Layout' }
+        }).filter(item => item.version)
+      } catch (ignore) {
+        return []
+      }
+    }
+
     _loadTableType () {
       const type = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
       this._shadowRoot.getElementById('tableType').value = type
-      this._dates = [{ id: 'Today', name: this._todayLabel() }, { id: 'Current Period', name: 'Current Period' }].concat(this._dates.filter(item => item.id !== 'Today' && item.id !== 'Current Period'))
-      this._fillMemberSelect(this._shadowRoot.getElementById('lookBackOn'), this._versions, this.lookBackOn || 'Actual')
-      this._fillMemberSelect(this._shadowRoot.getElementById('lookAheadOn'), this._versions, this.lookAheadOn || 'EPMplusA')
-      this._fillMemberSelect(this._shadowRoot.getElementById('cutOverDate'), this._dates, this.cutOverDate || 'Today')
       const setIf = (id, value) => {
         if (value != null && this._shadowRoot.getElementById(id)) {
           this._shadowRoot.getElementById(id).value = String(value)
         }
       }
+      setIf('cutOverMode', this._resolvedCutOverMode())
       setIf('timeframeType', this.timeframeType || 'Forecast')
       setIf('timeframeGranularity', this.timeframeGranularity || 'Quarter')
       setIf('timeframeRange', this.timeframeRange || 'Year')
@@ -566,24 +839,24 @@
       setIf('lookAheadAdditional', this.lookAheadAdditional == null ? 0 : this.lookAheadAdditional)
       setIf('lookAheadAdditionalUnit', this.lookAheadAdditionalUnit || 'Year')
       setIf('sumFor', this.sumFor || 'Cut-Over Year')
-      try {
-        const parsed = JSON.parse(this.additionalVersionsJson || '[]')
-        this._draftExtra = Array.isArray(parsed) ? parsed.map(String) : []
-      } catch (ignore) {
-        this._draftExtra = []
-      }
-      this._renderExtra()
+      this._draftExtra = this._parseExtra(this.additionalVersionsJson || '[]')
+      this._loadModelCatalog()
       this._toggleForecast()
     }
 
     _applyTableType () {
+      const mode = this._val('cutOverMode') || 'Today'
+      const cutOverDate = mode === 'SpecificDate'
+        ? (this._val('specificDate') || this.cutOverDate || '')
+        : (mode === 'LastBooked' ? 'LastBooked' : 'Today')
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: {
           properties: {
             tableType: this._val('tableType'),
             lookBackOn: this._val('lookBackOn'),
             lookAheadOn: this._val('lookAheadOn'),
-            cutOverDate: this._val('cutOverDate'),
+            cutOverMode: mode,
+            cutOverDate: cutOverDate,
             timeframeType: this._val('timeframeType'),
             timeframeGranularity: this._val('timeframeGranularity'),
             timeframeRange: this._val('timeframeRange'),
@@ -592,7 +865,7 @@
             lookAheadAdditional: Number(this._val('lookAheadAdditional') || 0),
             lookAheadAdditionalUnit: this._val('lookAheadAdditionalUnit'),
             sumFor: this._val('sumFor'),
-            additionalVersionsJson: JSON.stringify((this._draftExtra || []).filter(Boolean))
+            additionalVersionsJson: JSON.stringify((this._draftExtra || []).filter(item => item && item.version))
           }
         }
       }))

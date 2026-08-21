@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.7'
+  const WIDGET_VERSION = '1.3.8'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -217,15 +217,67 @@
     return Number.isNaN(parsed.getTime()) ? null : parsed
   }
 
-  const resolveCutOver = setting => {
-    const text = String(setting || 'Today')
+  const memberDate = member => parseLooseDate((member && member.id) || '') || parseLooseDate((member && member.label) || '')
+
+  const versionMatches = (cell, token) => {
+    if (!token) {
+      return true
+    }
+    const id = String((cell && cell.id) || '')
+    const label = String((cell && cell.label) || (cell && cell.name) || '')
+    const want = String(token)
+    if (!id && !label) {
+      return false
+    }
+    return id === want || label === want ||
+      id.toLowerCase() === want.toLowerCase() ||
+      label.toLowerCase() === want.toLowerCase()
+  }
+
+  const lastBookedActualDate = (data, dateDim, versionDim, actualToken) => {
+    let best = null
+    ;(data || []).forEach(row => {
+      if (versionDim) {
+        const cell = row[versionDim.key] || {}
+        const looksActual = /actual/i.test(String(cell.id || '')) || /actual/i.test(String(cell.label || ''))
+        const tokenLooksActual = /actual/i.test(String(actualToken || ''))
+        if (actualToken && !versionMatches(cell, actualToken) && !(tokenLooksActual && looksActual)) {
+          return
+        }
+        if (!actualToken && !looksActual) {
+          return
+        }
+      }
+      if (!dateDim) {
+        return
+      }
+      const date = memberDate(row[dateDim.key] || {})
+      if (date && (!best || date.getTime() > best.getTime())) {
+        best = date
+      }
+    })
+    return best
+  }
+
+  const resolveCutOver = (setting, options) => {
+    const opts = options || {}
+    const mode = String(opts.mode || setting || 'Today')
+    if (/last booked/i.test(mode) || mode === 'LastBooked') {
+      return lastBookedActualDate(opts.data, opts.dateDim, opts.versionDim, opts.actualToken) || new Date()
+    }
+    if (/specific/i.test(mode) || mode === 'SpecificDate') {
+      const token = opts.specificDate || setting
+      const fromMember = (opts.dateMembers || []).find(item =>
+        String(item.id) === String(token) || String(item.label) === String(token) || String(item.name) === String(token)
+      )
+      return (fromMember && memberDate(fromMember)) || parseLooseDate(token) || new Date()
+    }
+    const text = String(setting || mode || 'Today')
     if (!text || /^today/i.test(text) || /^current period/i.test(text)) {
       return new Date()
     }
     return parseLooseDate(text) || new Date()
   }
-
-  const memberDate = member => parseLooseDate((member && member.label) || '') || parseLooseDate((member && member.id) || '')
 
   const isForecastLookBack = (member, cutover) => {
     const date = memberDate(member)
@@ -758,7 +810,14 @@
       let extraVersions = []
       try {
         const parsed = JSON.parse(this.additionalVersionsJson || '[]')
-        extraVersions = Array.isArray(parsed) ? parsed.filter(Boolean).map(String) : []
+        extraVersions = Array.isArray(parsed)
+          ? parsed.map(item => {
+            if (item && typeof item === 'object') {
+              return String(item.version || item.id || '')
+            }
+            return String(item || '')
+          }).filter(Boolean)
+          : []
       } catch (ignore) {
         extraVersions = []
       }
@@ -767,11 +826,19 @@
       if (forecastMode && dateDim) {
         stackedDims = selectorDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
         rowDims = rowDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
-        const cutover = resolveCutOver(this.cutOverDate)
         const dateMembers = membersOf(dateDim).filter(item => item.id)
         const versionMembers = versionDim ? membersOf(versionDim) : []
         const lookBackId = this.lookBackOn || (versionMembers.find(item => /actual/i.test(String(item.label || item.id))) || { id: 'Actual' }).id
         const lookAheadId = this.lookAheadOn || (versionMembers.find(item => /epmplusa|forecast/i.test(String(item.label || item.id))) || { id: 'EPMplusA' }).id
+        const cutover = resolveCutOver(this.cutOverDate, {
+          mode: this.cutOverMode || this.cutOverDate,
+          specificDate: this.cutOverDate,
+          data: view,
+          dateDim,
+          versionDim,
+          dateMembers,
+          actualToken: lookBackId
+        })
         leafColumns = []
         dateMembers.forEach(date => {
           const primaryId = isForecastLookBack(date, cutover) ? lookBackId : lookAheadId
