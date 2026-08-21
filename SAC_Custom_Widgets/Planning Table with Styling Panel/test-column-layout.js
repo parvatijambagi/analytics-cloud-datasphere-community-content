@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate layout helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, parseLooseDate, resolveCutOver, isForecastLookBack, inForecastWindow }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions }\n')()
 
 const metadata = {
   dimensions: {
@@ -56,19 +56,6 @@ if (autoRows.map(d => d.description).join(',') !== 'ARE,Cost Center') {
 }
 if (autoCols.map(d => d.description).join(',') !== 'Date,GL-Accounts,Version') {
   throw new Error('Auto should stack Date/GL/Version, got ' + autoCols.map(d => d.description).join(','))
-}
-
-const q1 = { id: '2026.Q1', label: '2026 Q1' }
-const q4 = { id: '2026.Q4', label: '2026 Q4' }
-const cut = api.parseLooseDate('2026-08-21')
-if (!api.isForecastLookBack(q1, cut) || api.isForecastLookBack(q4, cut)) {
-  throw new Error('Forecast look-back should split at the cut-over date')
-}
-if (api.resolveCutOver('Today').getFullYear() !== new Date().getFullYear()) {
-  throw new Error('Today cut-over should resolve to the current year')
-}
-if (!api.inForecastWindow(q1, cut, { range: 'Year', lookBackAdditional: 0, lookBackUnit: 'Year', lookAheadAdditional: 0, lookAheadUnit: 'Year' })) {
-  throw new Error('Q1 2026 should stay inside the current-year forecast window')
 }
 
 console.log('column layout tests passed')

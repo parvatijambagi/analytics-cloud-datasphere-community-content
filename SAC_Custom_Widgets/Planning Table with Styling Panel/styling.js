@@ -73,8 +73,127 @@
         font: inherit;
         padding: 4px 12px;
       }
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid #d9d9d9;
+        margin: 0 0 12px;
+      }
+      .tab {
+        flex: 1;
+        height: 32px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: none;
+        font: inherit;
+        font-weight: 700;
+        color: #6a6d70;
+        cursor: pointer;
+      }
+      .tab.active {
+        color: #0854a0;
+        border-bottom-color: #0854a0;
+      }
+      .hidden { display: none; }
+      .type-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .type-row select { flex: 1; }
+      button.swap, button.step {
+        border: 1px solid #d9d9d9;
+        background: #fff;
+        height: 24px;
+        min-width: 28px;
+        cursor: pointer;
+      }
+      .stepper { display: flex; align-items: center; gap: 6px; }
+      .stepper input { width: 48px; text-align: center; flex: 0 0 48px; }
+      .stepper select { flex: 1; }
+      .footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+      .cancel { border: 0; background: none; font: inherit; cursor: pointer; }
+      .link { border: 0; background: none; color: #0854a0; font: inherit; font-weight: 600; cursor: pointer; padding: 8px 0; }
     </style>
     <div id="root">
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="table-type">Table Type</button>
+        <button type="button" class="tab" data-tab="styling">Styling</button>
+      </div>
+      <div id="pane-table-type">
+        <h3>Table Type</h3>
+        <div class="type-row">
+          <select id="tableType">
+            <option value="Cross-Tab">Cross-Tab</option>
+            <option value="Forecast">Forecast Layout</option>
+          </select>
+          <button type="button" class="swap" id="swap-axes" title="Swap axes">⇅</button>
+        </div>
+        <div id="forecast-panel" class="hidden">
+          <h3>Forecast Layout</h3>
+          <h3>Layout</h3>
+          <label for="lookBackOn">Look Back On</label>
+          <select id="lookBackOn"></select>
+          <label for="lookAheadOn">Look Ahead On</label>
+          <select id="lookAheadOn"></select>
+          <label for="cutOverDate">Cut-Over Date</label>
+          <select id="cutOverDate"></select>
+          <h3>Timeframe</h3>
+          <label for="timeframeType">Type</label>
+          <select id="timeframeType">
+            <option>Forecast</option>
+            <option>Rolling Forecast</option>
+            <option>Calendar</option>
+          </select>
+          <label for="timeframeGranularity">Granularity</label>
+          <select id="timeframeGranularity">
+            <option>Day</option>
+            <option>Week</option>
+            <option>Month</option>
+            <option selected>Quarter</option>
+            <option>Year</option>
+          </select>
+          <label for="timeframeRange">Range</label>
+          <select id="timeframeRange">
+            <option>Month</option>
+            <option>Quarter</option>
+            <option selected>Year</option>
+          </select>
+          <label>Look Back Additional</label>
+          <div class="stepper">
+            <button type="button" class="step" id="lookBackMinus">−</button>
+            <input id="lookBackAdditional" type="text" value="0" />
+            <button type="button" class="step" id="lookBackPlus">+</button>
+            <select id="lookBackAdditionalUnit">
+              <option>Day</option><option>Week</option><option>Month</option><option>Quarter</option><option selected>Year</option>
+            </select>
+          </div>
+          <label>Look Ahead Additional</label>
+          <div class="stepper">
+            <button type="button" class="step" id="lookAheadMinus">−</button>
+            <input id="lookAheadAdditional" type="text" value="0" />
+            <button type="button" class="step" id="lookAheadPlus">+</button>
+            <select id="lookAheadAdditionalUnit">
+              <option>Day</option><option>Week</option><option>Month</option><option>Quarter</option><option selected>Year</option>
+            </select>
+          </div>
+          <h3>Calculation</h3>
+          <label for="sumFor">Sum For:</label>
+          <select id="sumFor">
+            <option>None</option>
+            <option>Cut-Over Period</option>
+            <option>Cut-Over Quarter</option>
+            <option selected>Cut-Over Year</option>
+          </select>
+          <h3>Additional Versions</h3>
+          <div id="extra-versions"></div>
+          <button type="button" class="link" id="add-version">+ Add Version</button>
+          <div class="footer">
+            <button type="button" class="apply" id="apply-forecast">Apply</button>
+            <button type="button" class="cancel" id="cancel-forecast">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div id="pane-styling" class="hidden">
       <h3>Styling Rules</h3>
       <p class="hint">Styling rule which is listed at the top overrules the ones listed below.</p>
       <div id="rules"></div>
@@ -239,6 +358,7 @@
       </div>
 
       <button class="apply" id="apply">Apply</button>
+      </div>
     </div>
   `
 
@@ -253,6 +373,51 @@
         this._renderRules()
       })
       this._shadowRoot.getElementById('apply').addEventListener('click', () => this._apply())
+      this._shadowRoot.getElementById('apply-forecast').addEventListener('click', () => this._applyTableType())
+      this._shadowRoot.getElementById('cancel-forecast').addEventListener('click', () => this._loadTableType())
+      this._draftExtra = []
+      this._versions = [{ id: 'Actual', name: 'Actual' }, { id: 'EPMplusA', name: 'EPMplusA' }, { id: 'Budget', name: 'Budget' }, { id: 'Forecast', name: 'Forecast' }]
+      this._dates = [{ id: 'Today', name: 'Today' }, { id: 'Current Period', name: 'Current Period' }]
+      this._shadowRoot.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          this._shadowRoot.querySelectorAll('.tab').forEach(item => item.classList.toggle('active', item === tab))
+          const name = tab.getAttribute('data-tab')
+          this._shadowRoot.getElementById('pane-table-type').classList.toggle('hidden', name !== 'table-type')
+          this._shadowRoot.getElementById('pane-styling').classList.toggle('hidden', name !== 'styling')
+        })
+      })
+      const byId = id => this._shadowRoot.getElementById(id)
+      byId('tableType').addEventListener('change', () => {
+        this._toggleForecast()
+        this._applyTableType()
+      })
+      byId('swap-axes').addEventListener('click', () => {
+        this.dispatchEvent(new CustomEvent('propertiesChanged', {
+          detail: { properties: { swapAxes: !(this.swapAxes === true || this.swapAxes === 'true') } }
+        }))
+      })
+      ;['lookBackOn', 'lookAheadOn', 'cutOverDate', 'timeframeType', 'timeframeGranularity', 'timeframeRange', 'lookBackAdditionalUnit', 'lookAheadAdditionalUnit', 'sumFor'].forEach(id => {
+        byId(id).addEventListener('change', () => {
+          if (byId('tableType').value === 'Forecast') {
+            this._applyTableType()
+          }
+        })
+      })
+      const step = (id, delta) => {
+        const input = byId(id)
+        input.value = String(Math.max(0, (Number(input.value) || 0) + delta))
+        if (byId('tableType').value === 'Forecast') {
+          this._applyTableType()
+        }
+      }
+      byId('lookBackMinus').addEventListener('click', () => step('lookBackAdditional', -1))
+      byId('lookBackPlus').addEventListener('click', () => step('lookBackAdditional', 1))
+      byId('lookAheadMinus').addEventListener('click', () => step('lookAheadAdditional', -1))
+      byId('lookAheadPlus').addEventListener('click', () => step('lookAheadAdditional', 1))
+      byId('add-version').addEventListener('click', () => {
+        this._draftExtra.push(this._versions[0] ? this._versions[0].id : '')
+        this._renderExtra()
+      })
       this._renderRules()
     }
 
@@ -323,6 +488,114 @@
         })
         host.appendChild(wrap)
       })
+    }
+
+    _val (id) {
+      const el = this._shadowRoot.getElementById(id)
+      return el ? el.value : ''
+    }
+
+    _toggleForecast () {
+      const isForecast = this._val('tableType') === 'Forecast'
+      this._shadowRoot.getElementById('forecast-panel').classList.toggle('hidden', !isForecast)
+    }
+
+    _fillMemberSelect (select, items, current) {
+      if (!select) {
+        return
+      }
+      select.innerHTML = ''
+      const seen = new Set()
+      ;(items || []).forEach(item => {
+        if (!item || seen.has(item.id)) {
+          return
+        }
+        seen.add(item.id)
+        const opt = document.createElement('option')
+        opt.value = item.id
+        opt.textContent = item.name || item.id
+        if (String(current) === String(item.id) || String(current) === String(item.name)) {
+          opt.selected = true
+        }
+        select.appendChild(opt)
+      })
+    }
+
+    _renderExtra () {
+      const host = this._shadowRoot.getElementById('extra-versions')
+      host.innerHTML = ''
+      this._draftExtra.forEach((value, index) => {
+        const wrap = document.createElement('div')
+        wrap.className = 'row'
+        const select = document.createElement('select')
+        this._fillMemberSelect(select, this._versions, value)
+        select.addEventListener('change', () => {
+          this._draftExtra[index] = select.value
+          if (this._val('tableType') === 'Forecast') {
+            this._applyTableType()
+          }
+        })
+        wrap.appendChild(select)
+        host.appendChild(wrap)
+      })
+    }
+
+    _todayLabel () {
+      const now = new Date()
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return 'Today (' + months[now.getMonth()] + ' ' + now.getDate() + ', ' + now.getFullYear() + ')'
+    }
+
+    _loadTableType () {
+      const type = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
+      this._shadowRoot.getElementById('tableType').value = type
+      this._dates = [{ id: 'Today', name: this._todayLabel() }, { id: 'Current Period', name: 'Current Period' }].concat(this._dates.filter(item => item.id !== 'Today' && item.id !== 'Current Period'))
+      this._fillMemberSelect(this._shadowRoot.getElementById('lookBackOn'), this._versions, this.lookBackOn || 'Actual')
+      this._fillMemberSelect(this._shadowRoot.getElementById('lookAheadOn'), this._versions, this.lookAheadOn || 'EPMplusA')
+      this._fillMemberSelect(this._shadowRoot.getElementById('cutOverDate'), this._dates, this.cutOverDate || 'Today')
+      const setIf = (id, value) => {
+        if (value != null && this._shadowRoot.getElementById(id)) {
+          this._shadowRoot.getElementById(id).value = String(value)
+        }
+      }
+      setIf('timeframeType', this.timeframeType || 'Forecast')
+      setIf('timeframeGranularity', this.timeframeGranularity || 'Quarter')
+      setIf('timeframeRange', this.timeframeRange || 'Year')
+      setIf('lookBackAdditional', this.lookBackAdditional == null ? 0 : this.lookBackAdditional)
+      setIf('lookBackAdditionalUnit', this.lookBackAdditionalUnit || 'Year')
+      setIf('lookAheadAdditional', this.lookAheadAdditional == null ? 0 : this.lookAheadAdditional)
+      setIf('lookAheadAdditionalUnit', this.lookAheadAdditionalUnit || 'Year')
+      setIf('sumFor', this.sumFor || 'Cut-Over Year')
+      try {
+        const parsed = JSON.parse(this.additionalVersionsJson || '[]')
+        this._draftExtra = Array.isArray(parsed) ? parsed.map(String) : []
+      } catch (ignore) {
+        this._draftExtra = []
+      }
+      this._renderExtra()
+      this._toggleForecast()
+    }
+
+    _applyTableType () {
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: {
+          properties: {
+            tableType: this._val('tableType'),
+            lookBackOn: this._val('lookBackOn'),
+            lookAheadOn: this._val('lookAheadOn'),
+            cutOverDate: this._val('cutOverDate'),
+            timeframeType: this._val('timeframeType'),
+            timeframeGranularity: this._val('timeframeGranularity'),
+            timeframeRange: this._val('timeframeRange'),
+            lookBackAdditional: Number(this._val('lookBackAdditional') || 0),
+            lookBackAdditionalUnit: this._val('lookBackAdditionalUnit'),
+            lookAheadAdditional: Number(this._val('lookAheadAdditional') || 0),
+            lookAheadAdditionalUnit: this._val('lookAheadAdditionalUnit'),
+            sumFor: this._val('sumFor'),
+            additionalVersionsJson: JSON.stringify((this._draftExtra || []).filter(Boolean))
+          }
+        }
+      }))
     }
 
     _columnDimensionValue () {
@@ -455,6 +728,7 @@
       assign('readOnly', changedProps.readOnly)
       const binding = (changedProps && changedProps.dataBinding) || this.dataBinding
       this._renderColumnDimList(binding, this.columnDimension || colMode)
+      this._loadTableType()
     }
   }
 
