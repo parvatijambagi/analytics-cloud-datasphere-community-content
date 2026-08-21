@@ -56,7 +56,7 @@
       return []
     }
     const feeds = (metadata && metadata.feeds) || {}
-    let tokens = collectFeedValues(feeds, ['columns', 'series', 'column', 'columnDimensions', 'color'])
+    let tokens = collectFeedValues(feeds, ['columns', 'series', 'column', 'columnDimensions', 'color', 'dimensions2', 'categoryAxis2'])
     if (!tokens.length) {
       Object.keys(feeds).forEach(name => {
         if (name === 'dimensions' || name === 'rows' || name === 'measures') {

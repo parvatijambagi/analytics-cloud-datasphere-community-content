@@ -221,9 +221,11 @@
       <label for="columnDimension">Column dimensions</label>
       <select id="columnDimension">
         <option value="Auto">Auto (Date, Version, Depthstructure)</option>
+        <option value="Checked">Use checked dimensions below</option>
         <option value="None">None (all dimensions on rows)</option>
       </select>
-      <p class="hint">Auto shows Date, Version, and Depthstructure as selector rows under Measures (current member plus dropdown), like a native table. None keeps every dimension as a data row.</p>
+      <p class="hint">A dimension cannot be on Rows and Columns at once. Remove it from Rows, then add it in Columns. If the Columns picker still does not keep the checkbox, tick the dimension below and click Apply.</p>
+      <div id="column-dim-list" class="checks"></div>
       <label for="headerBackground">Header background</label>
       <input id="headerBackground" type="text" placeholder="#0854A0" />
       <label for="headerTextColor">Header text color</label>
@@ -323,8 +325,39 @@
       })
     }
 
-    _val (id) {
-      return this._shadowRoot.getElementById(id).value
+    _columnDimensionValue () {
+      const mode = this._val('columnDimension')
+      if (mode !== 'Checked') {
+        return mode
+      }
+      const checked = []
+      this._shadowRoot.querySelectorAll('#column-dim-list input[data-col-dim]:checked').forEach(input => {
+        checked.push(input.getAttribute('data-col-dim'))
+      })
+      return checked.length ? checked.join(',') : 'None'
+    }
+
+    _renderColumnDimList (binding, selected) {
+      const host = this._shadowRoot.getElementById('column-dim-list')
+      if (!host) {
+        return
+      }
+      const dims = (((binding || {}).metadata || {}).dimensions) || {}
+      const keys = Object.keys(dims)
+      if (!keys.length) {
+        host.innerHTML = '<p class="hint">Bind dimensions in Builder first, then they appear here.</p>'
+        return
+      }
+      const selectedParts = String(selected || '').split(',').map(part => part.trim().toLowerCase()).filter(Boolean)
+      host.innerHTML = keys.map(key => {
+        const dim = Object.assign({ key, id: key }, dims[key])
+        const id = String(dim.id || key)
+        const name = String(dim.description || dim.label || id)
+        const isOn = selectedParts.indexOf(id.toLowerCase()) !== -1 ||
+          selectedParts.indexOf(name.toLowerCase()) !== -1 ||
+          selectedParts.indexOf(String(key).toLowerCase()) !== -1
+        return '<label><input type="checkbox" data-col-dim="' + id.replace(/"/g, '&quot;') + '"' + (isOn ? ' checked' : '') + ' /> ' + name.replace(/</g, '&lt;') + '</label>'
+      }).join('')
     }
 
     _apply () {
@@ -356,7 +389,7 @@
             headerBackground: this._val('headerBackground'),
             headerTextColor: this._val('headerTextColor'),
             changedCellColor: this._val('changedCellColor'),
-            columnDimension: this._val('columnDimension'),
+            columnDimension: this._columnDimensionValue(),
             showTotals: this._shadowRoot.getElementById('showTotals').checked,
             showToolbar: this._shadowRoot.getElementById('showToolbar').checked,
             readOnly: this._shadowRoot.getElementById('readOnly').checked
@@ -411,10 +444,17 @@
       assign('headerBackground', changedProps.headerBackground)
       assign('headerTextColor', changedProps.headerTextColor)
       assign('changedCellColor', changedProps.changedCellColor)
-      assign('columnDimension', changedProps.columnDimension)
+      const colMode = changedProps.columnDimension
+      if (colMode && colMode !== 'Auto' && colMode !== 'None' && colMode !== 'Checked') {
+        assign('columnDimension', 'Checked')
+      } else {
+        assign('columnDimension', colMode)
+      }
       assign('showTotals', changedProps.showTotals)
       assign('showToolbar', changedProps.showToolbar)
       assign('readOnly', changedProps.readOnly)
+      const binding = (changedProps && changedProps.dataBinding) || this.dataBinding
+      this._renderColumnDimList(binding, this.columnDimension || colMode)
     }
   }
 

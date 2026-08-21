@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table",
       "url": "/main.js",
-      "integrity": "sha256-qDcYuXW7FurDpcHSJ5GnkWdq3hHxdluE31A0Z022i/U=",
+      "integrity": "sha256-QjgnXIyoayjeZH4qm2tsQcvbBS5nYcfsJH1IRcPXSFw=",
       "ignoreIntegrity": true
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling",
       "url": "/styling.js",
-      "integrity": "sha256-BrtF8NYeT5YF1wtESrwTKTGNpA0xHypHFq4GYiftif0=",
+      "integrity": "sha256-5Cwmrlzr70U0DXHOMQm277DqZMQdfacOkq0N/0uiZ3Q=",
       "ignoreIntegrity": true
     }
   ],
@@ -215,7 +215,7 @@
           "description": "Dimension ID"
         }
       ],
-      "body": "this.dataBindings.getDataBinding('dataBinding').addDimensionToFeed('color', dimensionId);"
+      "body": "this.dataBindings.getDataBinding('dataBinding').addDimensionToFeed('dimensions2', dimensionId);"
     },
     "addMeasure": {
       "description": "Add a measure or account to the Measures feed",
@@ -319,7 +319,7 @@
           "type": "dimension"
         },
         {
-          "id": "color",
+          "id": "dimensions2",
           "description": "Columns",
           "type": "dimension"
         },
