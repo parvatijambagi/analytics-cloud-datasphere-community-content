@@ -30,12 +30,12 @@ The ZIP must keep `main-v13.js` and `styling-v13.js` at the archive root. Those 
 
 If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-**You must delete the previous Planning Table custom widget** (id `com.sap.sac.sample.planning.table`, versions 1.1.x–1.2.x) before uploading **1.3.0**. SAC caches the old `main.js` and will not replace a custom element that is already registered. After a correct install the toolbar shows **v1.3.0**, and the first header cell is **Measures** (not ARE / Date / Version). If you still see ARE | Cost Center | Date | Version as one blue header row, the old widget is still running.
+**Re-upload JSON + ZIP** after this change (widget version **1.3.1**). After a correct install the toolbar shows **v1.3.1**. Dimensions added in **Columns** (Date, GL-Accounts, Version) stack under Measures as header rows, the same way as a native SAC table. Row dimensions such as ARE stay on the left. If Date / Version / GL-Accounts still appear as extra columns next to ARE, the previous ZIP is still loaded.
 
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 
 - **Rows** — dimensions such as ARE
-- **Columns** — extra dimensions (column headers)
+- **Columns** — Date, Version, GL-Accounts (stacked header rows under Measures)
 - **Measures** — measures or accounts
 
 If **+ Add Dimension** on Columns does not keep a checkbox, the dimension is probably already on **Rows** (SAC will not put the same dimension on two wells). Remove it from Rows, then add it in Columns. If it still does not stick, open **Styling**, choose **Use checked dimensions below**, tick Date / Depthstructure, and Apply.
@@ -50,7 +50,7 @@ That message means SAC has not returned a successful result set yet. It is not a
 2. Select the widget → **Builder** panel (left), not Styling.
 3. Assign a model.
 4. Drag **at least one dimension** into *Rows*.
-5. Drag **at least one measure or account** into *Measures*. Add dimensions to *Columns* if you want them as column headers.
+5. Drag **at least one measure or account** into *Measures*. Add Date, GL-Accounts, and Version to *Columns* so they stack under Measures.
 6. For planning models, add a **Version** filter (and Date/Time if the model requires it).
 7. Compare with a native Table on the same model: if the native table is empty, the custom widget will be empty too.
 

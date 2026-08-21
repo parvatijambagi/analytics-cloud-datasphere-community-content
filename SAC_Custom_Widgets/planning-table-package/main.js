@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.0'
+  const WIDGET_VERSION = '1.3.1'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -14,44 +14,91 @@
     return { dimensions, measures }
   }
 
+  const feedToken = item => {
+    if (item == null || item === '') {
+      return null
+    }
+    if (typeof item === 'string' || typeof item === 'number') {
+      return String(item)
+    }
+    if (typeof item !== 'object') {
+      return null
+    }
+    return item.id || item.key || item.dimensionId || item.name || item.description || item.label || null
+  }
+
   const collectFeedValues = (feeds, names) => {
     const values = []
+    const push = item => {
+      const token = feedToken(item)
+      if (token != null && values.indexOf(token) === -1) {
+        values.push(token)
+      }
+    }
     ;(names || []).forEach(name => {
       const feed = feeds && feeds[name]
-      const list = feed && feed.values
-      if (Array.isArray(list)) {
-        list.forEach(item => {
-          if (item != null && values.indexOf(item) === -1) {
-            values.push(item)
-          }
-        })
+      if (feed == null) {
+        return
       }
+      if (Array.isArray(feed)) {
+        feed.forEach(push)
+        return
+      }
+      if (typeof feed !== 'object') {
+        push(feed)
+        return
+      }
+      ;['values', 'members', 'ids', 'dimensions', 'value'].forEach(field => {
+        const list = feed[field]
+        if (Array.isArray(list)) {
+          list.forEach(push)
+        } else if (list != null && field === 'value') {
+          push(list)
+        }
+      })
     })
     return values
   }
 
+  const resolveFeeds = (dataBinding, metadata) => {
+    return Object.assign(
+      {},
+      (dataBinding && dataBinding.feeds) || {},
+      (metadata && metadata.feeds) || {}
+    )
+  }
+
+  const identList = dimension => {
+    return [dimension.key, dimension.id, dimension.description, dimension.label]
+      .filter(value => value != null && value !== '')
+      .map(value => String(value))
+  }
+
   const matchDimension = (dimensions, token) => {
-    const value = String(token || '')
+    const value = String(feedToken(token) || '')
     if (!value) {
       return null
     }
+    const n = value.trim().toLowerCase()
     return dimensions.find(dimension => {
-      const id = String(dimension.id || '')
-      return dimension.key === value ||
-        id === value ||
-        dimension.description === value ||
-        dimension.label === value ||
-        id.endsWith('.' + value) ||
-        id.indexOf('[' + value + ']') !== -1
+      return identList(dimension).some(id => {
+        const nid = id.trim().toLowerCase()
+        return nid === n ||
+          nid.endsWith('.' + n) ||
+          nid.endsWith(':' + n) ||
+          nid.indexOf('[' + n + ']') !== -1 ||
+          nid.indexOf('&[' + n + ']') !== -1
+      })
     }) || null
   }
 
   const dimName = dimension => String(dimension.description || dimension.label || dimension.id || dimension.key || '')
+  const dimSearch = dimension => identList(dimension).join(' ').toLowerCase()
 
-  const isVersionDim = dimension => /version/.test(dimName(dimension).toLowerCase())
-  const isDateDim = dimension => /date|time|month|period|year|calmonth|fiscal/.test(dimName(dimension).toLowerCase())
-  const isGlDim = dimension => /gl.?-?accounts?|glaccounts/.test(dimName(dimension).toLowerCase())
-  const isSelectorDim = dimension => isVersionDim(dimension) || isDateDim(dimension) || isGlDim(dimension) || /depth|structure/.test(dimName(dimension).toLowerCase())
+  const isVersionDim = dimension => /version/.test(dimSearch(dimension))
+  const isDateDim = dimension => /date|time|month|period|year|calmonth|fiscal/.test(dimSearch(dimension))
+  const isGlDim = dimension => /g[\s\/._-]*l[\s\/._-]*accounts?|glaccounts/.test(dimSearch(dimension))
+  const isSelectorDim = dimension => isVersionDim(dimension) || isDateDim(dimension) || isGlDim(dimension) || /depth|structure/.test(dimSearch(dimension))
 
   const selectorRank = dimension => {
     if (isDateDim(dimension)) return 0
@@ -74,15 +121,20 @@
     return out
   }
 
-  const pickColumnDimensions = (dimensions, metadata, columnDimension) => {
+  const COLUMN_FEED_NAMES = ['dimensions2', 'columns', 'series', 'column', 'columnDimensions', 'color', 'categoryAxis2']
+  const ROW_FEED_NAMES = ['dimensions', 'rows']
+
+  const pickColumnDimensions = (dimensions, metadata, columnDimension, dataBinding) => {
     if (!dimensions || !dimensions.length) {
       return []
     }
-    const feeds = (metadata && metadata.feeds) || {}
-    let tokens = collectFeedValues(feeds, ['columns', 'series', 'column', 'columnDimensions', 'color', 'dimensions2', 'categoryAxis2'])
+    const feeds = resolveFeeds(dataBinding, metadata)
+    const rowMatched = uniqueDims(collectFeedValues(feeds, ROW_FEED_NAMES).map(token => matchDimension(dimensions, token)))
+    const rowKeys = new Set(rowMatched.map(dimension => dimension.key))
+    let tokens = collectFeedValues(feeds, COLUMN_FEED_NAMES)
     Object.keys(feeds).forEach(name => {
       const lower = String(name || '').toLowerCase()
-      if (lower === 'dimensions' || lower === 'rows' || lower === 'measures') {
+      if (ROW_FEED_NAMES.indexOf(lower) !== -1 || lower === 'measures' || lower === 'mainstructuremember') {
         return
       }
       collectFeedValues(feeds, [name]).forEach(item => {
@@ -91,7 +143,15 @@
         }
       })
     })
-    const fromFeed = uniqueDims(tokens.map(token => matchDimension(dimensions, token)))
+    let fromFeed = uniqueDims(tokens.map(token => matchDimension(dimensions, token)))
+    const columnsFeedPopulated = fromFeed.length > 0
+    if (!columnsFeedPopulated && rowMatched.length) {
+      dimensions.forEach(dimension => {
+        if (!rowKeys.has(dimension.key)) {
+          fromFeed.push(dimension)
+        }
+      })
+    }
     const requested = String(columnDimension == null ? 'Auto' : columnDimension).trim()
     if (requested === 'None') {
       return sortSelectors(fromFeed)
@@ -99,6 +159,9 @@
     let list = fromFeed.slice()
     if (requested === 'Auto' || requested === '') {
       dimensions.filter(isSelectorDim).forEach(dimension => {
+        if (columnsFeedPopulated && rowKeys.has(dimension.key)) {
+          return
+        }
         if (list.every(item => item.key !== dimension.key)) {
           list.push(dimension)
         }
@@ -114,15 +177,14 @@
     return sortSelectors(list)
   }
 
-  const pickRowDimensions = (dimensions, metadata, colDims) => {
-    const feeds = (metadata && metadata.feeds) || {}
-    const tokens = collectFeedValues(feeds, ['dimensions', 'rows'])
-    const mapped = tokens.map(token => matchDimension(dimensions, token)).filter(Boolean)
+  const pickRowDimensions = (dimensions, metadata, colDims, dataBinding) => {
+    const feeds = resolveFeeds(dataBinding, metadata)
+    const tokens = collectFeedValues(feeds, ROW_FEED_NAMES)
+    const mapped = uniqueDims(tokens.map(token => matchDimension(dimensions, token)))
+    const colKeys = new Set((colDims || []).map(dimension => dimension.key))
     if (mapped.length) {
-      const colKeys = new Set((colDims || []).map(dimension => dimension.key))
       return mapped.filter(dimension => !colKeys.has(dimension.key))
     }
-    const colKeys = new Set((colDims || []).map(dimension => dimension.key))
     return dimensions.filter(dimension => !colKeys.has(dimension.key))
   }
 
@@ -135,7 +197,7 @@
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
           <li>Add ARE to <em>Rows</em>.</li>
-          <li>Add Date, GL-Accounts, and Version to <em>Columns</em>. They appear under Measures as selector rows (Date → (all), GL-Accounts → H1_Top, Version → Actual), not as extra row columns.</li>
+          <li>Add Date, GL-Accounts, and Version to <em>Columns</em>. They stack under Measures as header rows (Date → (all), GL-Accounts → H1_Top, Version → Actual) across each measure column, not as extra row columns next to ARE.</li>
           <li>Add measures such as Global Currency and Local Currency to <em>Measures</em>.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
         </ol>
@@ -384,15 +446,23 @@
         color: #32363a;
         font-weight: 700;
         text-align: left;
+        border-bottom: 1px solid #d9d9d9;
       }
-      select.member-link {
+      thead tr.selector:last-of-type th,
+      thead tr.selector:last-of-type td {
+        border-bottom: 3px solid #32363a;
+      }
+      select.member-link,
+      span.member-link {
         max-width: 100%;
         border: 0;
         background: transparent;
         color: #0854a0;
         font: inherit;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
       }
       .chev {
         color: #0854a0;
@@ -547,8 +617,8 @@
       const data = dataBinding && dataBinding.data
       const metadata = dataBinding && dataBinding.metadata
       const { dimensions, measures } = parseMetadata(metadata)
-      const selectorDims = pickColumnDimensions(dimensions, metadata, this.columnDimension)
-      const rowDims = pickRowDimensions(dimensions, metadata, selectorDims)
+      const selectorDims = pickColumnDimensions(dimensions, metadata, this.columnDimension, dataBinding)
+      const rowDims = pickRowDimensions(dimensions, metadata, selectorDims, dataBinding)
       const hasFeeds = (rowDims.length > 0 || selectorDims.length > 0) && measures.length > 0
 
       if (!dataBinding || state === 'loading' || !state) {
@@ -672,27 +742,27 @@
       selectorDims.forEach(dimension => {
         const members = membersOf(dimension)
         const selected = selectedMember(dimension)
-        const selectedLabel = (members.find(item => item.id === selected) || {}).label || '(all)'
+        const showChevron = !isVersionDim(dimension) || members.length > 1
+        const chev = showChevron ? '<span class="chev">›</span>' : ''
         table += '<tr class="selector">'
-        table += `<th class="selector">${this._escape(dimName(dimension))}<span class="chev">›</span></th>`
+        table += `<th class="selector">${this._escape(dimName(dimension))}${chev}</th>`
         if (rowDims.length > 1) {
           rowDims.slice(1).forEach(() => {
             table += '<th class="selector"></th>'
           })
         }
-        measures.forEach((measure, measureIndex) => {
+        measures.forEach(() => {
           table += '<td class="selector">'
-          if (measureIndex === 0) {
-            table += `<select class="member-link" data-dim="${this._escape(dimension.key)}">`
-            table += '<option value="">(all)</option>'
-            members.forEach(item => {
-              const isSel = item.id === selected ? ' selected' : ''
-              table += `<option value="${this._escape(item.id)}"${isSel}>${this._escape(item.label || item.id || '(all)')}</option>`
-            })
-            table += '</select><span class="chev">›</span>'
-          } else {
-            table += `<span class="member-link">${this._escape(selectedLabel)}</span><span class="chev">›</span>`
-          }
+          table += `<select class="member-link" data-dim="${this._escape(dimension.key)}" aria-label="${this._escape(dimName(dimension))}">`
+          table += '<option value="">(all)</option>'
+          members.forEach(item => {
+            if (!item.id) {
+              return
+            }
+            const isSel = item.id === selected ? ' selected' : ''
+            table += `<option value="${this._escape(item.id)}"${isSel}>${this._escape(item.label || item.id || '(all)')}</option>`
+          })
+          table += `</select>${chev}`
           table += '</td>'
         })
         table += '</tr>'
