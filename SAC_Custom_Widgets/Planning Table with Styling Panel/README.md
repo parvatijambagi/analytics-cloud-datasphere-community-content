@@ -31,7 +31,7 @@ The ZIP must keep `main-v13.js`, `styling-v13.js`, and `builder-v13.js` at the a
 
 If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-**Re-upload JSON + ZIP** after this change (widget version **1.3.5**). After a correct install the toolbar shows **v1.3.5**. **Builder** has **Table Type** on top (Cross-Tab or Forecast Layout). Choosing **Forecast Layout** opens the Forecast Layout options (Look Back On, Look Ahead On, Cut-Over Date, Timeframe, Calculation). Changing any dropdown applies it to the same table.
+**Re-upload JSON + ZIP** after this change (widget version **1.3.6**). After a correct install the toolbar shows **v1.3.6**. The 1.3.2 table is unchanged. Builder matches the native layout: **Table Type** (Cross-Tab / Forecast Layout) on top, then **Rows**, **Columns** (Measures nested inside Columns, then Date / GL-Accounts / Version), then **Filters**. Choosing Forecast Layout only adds the forecast options; it does not change how you add rows, columns, or measures.
 
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 

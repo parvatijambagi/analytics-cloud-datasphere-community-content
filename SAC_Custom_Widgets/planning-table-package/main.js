@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.5'
+  const WIDGET_VERSION = '1.3.6'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}

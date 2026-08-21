@@ -205,15 +205,40 @@
       .ds { font-weight: 700; padding: 4px 0 8px; }
       .hidden { display: none; }
       .hint { color: #6a6d70; font-size: 11px; margin: 0 0 8px; }
-      .body { padding: 0 0 8px; }
+      .measures-box {
+        border: 1px solid #d9d9d9;
+        border-radius: 8px;
+        background: #fff;
+        padding: 6px 8px 8px;
+        margin: 6px 0 8px;
+      }
+      .measures-h {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 700;
+        padding: 4px 2px 6px;
+      }
+      .measures-h .name { flex: 1; }
+      .linked {
+        display: inline-block;
+        color: #0854a0;
+        font-weight: 600;
+        padding: 8px 10px 4px;
+        text-decoration: none;
+      }
+      .section-h .spacer { flex: 1; }
+      .section-h .menu, .measures-h .menu {
+        color: #0854a0;
+        font-weight: 700;
+        letter-spacing: 2px;
+        padding: 0 4px;
+      }
+      .filter-chip .meta { color: #6a6d70; font-size: 12px; margin-left: 6px; }
     </style>
     <div id="root">
       <div class="section">
-        <div class="label">Data Source</div>
-        <div class="ds" id="data-source-name">Not bound</div>
-      </div>
-      <div class="section">
-        <div class="label">Table Type</div>
+        <a class="linked" href="#" id="add-linked">+ Add Linked Models</a>
         <div class="type-row">
           <div class="type-dd">
             <button type="button" class="type-btn" id="tableTypeBtn" aria-haspopup="listbox">
@@ -292,20 +317,15 @@
         </div>
       </div>
       <div class="section">
-        <div class="section-h" data-toggle="measures-body"><span class="chevron">▼</span> Measures</div>
-        <div class="body" id="measures-body"></div>
+        <div class="section-h" data-toggle="rows-body"><span class="chevron">▼</span> Rows<span class="spacer"></span><span class="menu">···</span></div>
+        <div class="body" id="rows-body"></div>
       </div>
       <div class="section">
-        <div class="section-h" data-toggle="dims-body"><span class="chevron">▼</span> Dimensions</div>
-        <div class="body" id="dims-body">
-          <div class="sub-label">Rows</div>
-          <div id="rows-body"></div>
-          <div class="sub-label">Columns</div>
-          <div id="columns-body"></div>
-        </div>
+        <div class="section-h" data-toggle="columns-body"><span class="chevron">▼</span> Columns<span class="spacer"></span><span class="menu">···</span></div>
+        <div class="body" id="columns-body"></div>
       </div>
       <div class="section">
-        <div class="section-h" data-toggle="filters-body"><span class="chevron">▼</span> Filters</div>
+        <div class="section-h" data-toggle="filters-body"><span class="chevron">▼</span> Filters<span class="spacer"></span><span class="menu">···</span></div>
         <div class="body" id="filters-body"></div>
       </div>
     </div>
@@ -354,6 +374,9 @@
           body.style.display = hidden ? '' : 'none'
           el.querySelector('.chevron').textContent = hidden ? '▼' : '▶'
         })
+      })
+      byId('add-linked').addEventListener('click', event => {
+        event.preventDefault()
       })
       byId('tableTypeBtn').addEventListener('click', event => {
         event.stopPropagation()
@@ -556,7 +579,10 @@
       const data = (binding && binding.data) || []
       const dsName = metadata.modelId || metadata.modelName || metadata.dataSourceName ||
         (binding && binding.dataSourceName) || 'PAR_FC'
-      this._shadowRoot.getElementById('data-source-name').textContent = String(dsName)
+      const nameEl = this._shadowRoot.getElementById('data-source-name')
+      if (nameEl) {
+        nameEl.textContent = String(dsName)
+      }
 
       const versionDim = Object.keys(dims).map(key => Object.assign({ key }, dims[key])).find(dim => /version/i.test(String(dim.description || dim.label || dim.id || dim.key)))
       const dateDim = Object.keys(dims).map(key => Object.assign({ key }, dims[key])).find(dim => /date|time|month|period|year|calmonth|fiscal/i.test(String(dim.description || dim.label || dim.id || dim.key)))
@@ -649,19 +675,23 @@
       const dimChoices = this._available(this._allDimensions, usedDims)
       const measureChoices = this._available(this._allMeasures, this._measures)
 
-      const measures = this._shadowRoot.getElementById('measures-body')
-      measures.innerHTML = this._measures.map(item => this._chip(item, 'measures', 'measure')).join('') +
-        '<button class="link" id="add-measure" type="button">' + plus + ' Add Measures</button>' +
-        '<select id="select-measure"></select>'
-
       const rows = this._shadowRoot.getElementById('rows-body')
       rows.innerHTML = this._rows.map(item => this._chip(item, 'dimensions', 'dimension')).join('') +
-        '<button class="link" id="add-row" type="button">' + plus + ' Add Dimensions</button>' +
+        '<button class="link" id="add-row" type="button">' + plus + ' Add Dimension</button>' +
         '<select id="select-row"></select>'
 
       const cols = this._shadowRoot.getElementById('columns-body')
-      cols.innerHTML = this._columns.map(item => this._chip(item, 'dimensions2', 'dimension')).join('') +
-        '<button class="link" id="add-col" type="button">' + plus + ' Add Dimensions</button>' +
+      const measureChips = this._measures.map(item => this._chip(item, 'measures', 'measure')).join('')
+      const columnChips = this._columns.map(item => this._chip(item, 'dimensions2', 'dimension')).join('')
+      cols.innerHTML =
+        '<div class="measures-box">' +
+          '<div class="measures-h">' + ruler + '<span class="name">Measures</span><span class="menu">···</span></div>' +
+          measureChips +
+          '<button class="link" id="add-measure" type="button">' + plus + ' Add Measure</button>' +
+          '<select id="select-measure"></select>' +
+        '</div>' +
+        columnChips +
+        '<button class="link" id="add-col" type="button">' + plus + ' Add Dimension</button>' +
         '<select id="select-col"></select>'
 
       const filters = this._shadowRoot.getElementById('filters-body')
