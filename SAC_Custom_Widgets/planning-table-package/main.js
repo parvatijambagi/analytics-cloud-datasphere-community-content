@@ -213,6 +213,10 @@
     if (year) {
       return new Date(Number(year[1]), 0, 1)
     }
+    const period = text.match(/P\s*(0?[1-9]|1[0-2])\D+(20\d{2}|19\d{2})/i)
+    if (period) {
+      return new Date(Number(period[2]), Number(period[1]) - 1, 1)
+    }
     const parsed = new Date(text)
     return Number.isNaN(parsed.getTime()) ? null : parsed
   }
@@ -400,6 +404,150 @@
       })
     })
     return out
+  }
+
+  const startOfPeriod = (date, unit) => {
+    const value = new Date(date.getTime())
+    const key = String(unit || 'Year').toLowerCase()
+    if (key === 'day') {
+      return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+    }
+    if (key === 'week') {
+      const day = value.getDay()
+      value.setDate(value.getDate() - day)
+      return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+    }
+    if (key === 'month') {
+      return new Date(value.getFullYear(), value.getMonth(), 1)
+    }
+    if (key === 'quarter') {
+      return new Date(value.getFullYear(), Math.floor(value.getMonth() / 3) * 3, 1)
+    }
+    return new Date(value.getFullYear(), 0, 1)
+  }
+
+  const endOfPeriod = (date, unit) => {
+    const start = startOfPeriod(date, unit)
+    const key = String(unit || 'Year').toLowerCase()
+    if (key === 'day') {
+      return new Date(start.getFullYear(), start.getMonth(), start.getDate(), 23, 59, 59, 999)
+    }
+    if (key === 'week') {
+      return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999)
+    }
+    if (key === 'month') {
+      return new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999)
+    }
+    if (key === 'quarter') {
+      return new Date(start.getFullYear(), start.getMonth() + 3, 0, 23, 59, 59, 999)
+    }
+    return new Date(start.getFullYear(), 11, 31, 23, 59, 59, 999)
+  }
+
+  const addPeriods = (date, count, unit) => {
+    const value = new Date(date.getTime())
+    const n = Number(count) || 0
+    const key = String(unit || 'Year').toLowerCase()
+    if (key === 'day') {
+      value.setDate(value.getDate() + n)
+    } else if (key === 'week') {
+      value.setDate(value.getDate() + (n * 7))
+    } else if (key === 'month') {
+      value.setMonth(value.getMonth() + n)
+    } else if (key === 'quarter') {
+      value.setMonth(value.getMonth() + (n * 3))
+    } else {
+      value.setFullYear(value.getFullYear() + n)
+    }
+    return value
+  }
+
+  const grainKeyOf = unit => {
+    const key = String(unit || 'Month').toLowerCase()
+    if (key === 'year') {
+      return 'year'
+    }
+    if (key === 'quarter') {
+      return 'quarter'
+    }
+    if (key === 'week' || key === 'day') {
+      return key === 'week' ? 'week' : 'day'
+    }
+    return 'month'
+  }
+
+  const formatForecastDateLabel = (member, grain) => {
+    const existing = String((member && member.label) || '')
+    if (/P\s*(0?[1-9]|1[0-2])/i.test(existing) && /\d{4}/.test(existing)) {
+      return existing
+    }
+    const date = memberDate(member)
+    if (!date) {
+      return existing || (member && member.id) || ''
+    }
+    const key = grainKeyOf(grain)
+    if (key === 'year') {
+      return String(date.getFullYear())
+    }
+    if (key === 'quarter') {
+      return date.getFullYear() + ' Q' + (Math.floor(date.getMonth() / 3) + 1)
+    }
+    if (key === 'month') {
+      const period = String(date.getMonth() + 1).padStart(2, '0')
+      return 'P' + period + ' (' + date.getFullYear() + ')'
+    }
+    return existing || (member && member.id) || ''
+  }
+
+  const pickForecastDateMembers = (members, cutover, settings) => {
+    const opts = settings || {}
+    const grain = opts.granularity || 'Month'
+    const range = opts.range || 'Year'
+    const lookBackN = Number(opts.lookBackAdditional || 0)
+    const lookBackUnit = opts.lookBackAdditionalUnit || 'Year'
+    const lookAheadN = Number(opts.lookAheadAdditional || 0)
+    const lookAheadUnit = opts.lookAheadAdditionalUnit || 'Year'
+    const pivot = cutover instanceof Date ? cutover : new Date()
+    const rangeStart = startOfPeriod(pivot, range)
+    const rangeEnd = endOfPeriod(pivot, range)
+    const from = addPeriods(rangeStart, -lookBackN, lookBackUnit)
+    const to = addPeriods(rangeEnd, lookAheadN, lookAheadUnit)
+    const dated = (members || []).map(member => ({ member, date: memberDate(member) })).filter(item => item.date)
+    dated.sort((a, b) => a.date.getTime() - b.date.getTime())
+    const lookBackExtra = []
+    const inRange = []
+    const lookAheadExtra = []
+    dated.forEach(item => {
+      if (item.date < from || item.date > to) {
+        return
+      }
+      if (item.date < rangeStart) {
+        lookBackExtra.push(item.member)
+      } else if (item.date > rangeEnd) {
+        lookAheadExtra.push(item.member)
+      } else {
+        inRange.push(item.member)
+      }
+    })
+    const pick = (list, level) => {
+      if (!list.length) {
+        return []
+      }
+      const filtered = filterMembersByLevel(list, level)
+      return filtered.length ? filtered : list
+    }
+    const backLevel = lookBackUnit.toLowerCase() === 'year' ? 'year' : grainKeyOf(lookBackUnit)
+    const aheadLevel = grainKeyOf(grain)
+    const picked = pick(lookBackExtra, backLevel).concat(pick(inRange, aheadLevel)).concat(pick(lookAheadExtra, aheadLevel))
+    const seen = new Set()
+    return picked.filter(member => {
+      const id = member.id || member.label
+      if (!id || seen.has(id)) {
+        return false
+      }
+      seen.add(id)
+      return true
+    })
   }
 
   const drillOptionsFor = dimension => {
@@ -1010,31 +1158,47 @@
       if (forecastMode && dateDim) {
         stackedDims = selectorDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
         rowDims = rowDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
-        const dateMembers = membersOf(dateDim).filter(item => item.id)
         const versionMembers = versionDim ? membersOf(versionDim) : []
         const lookBackId = this.lookBackOn || (versionMembers.find(item => /actual/i.test(String(item.label || item.id))) || { id: 'Actual' }).id
-        const lookAheadId = this.lookAheadOn || (versionMembers.find(item => /epmplusa|forecast/i.test(String(item.label || item.id))) || { id: 'EPMplusA' }).id
+        const lookAheadId = this.lookAheadOn || (versionMembers.find(item => /\bfc\b|epmplusa|forecast/i.test(String(item.label || item.id))) || { id: 'FC' }).id
+        const allDates = membersOf(dateDim).filter(item => item.id || item.label)
         const cutover = resolveCutOver(this.cutOverDate, {
           mode: this.cutOverMode || this.cutOverDate,
           specificDate: this.cutOverDate,
           data: view,
           dateDim,
           versionDim,
-          dateMembers,
+          dateMembers: allDates,
           actualToken: lookBackId
         })
+        const dateMembers = pickForecastDateMembers(allDates, cutover, {
+          granularity: this.timeframeGranularity || 'Month',
+          range: this.timeframeRange || 'Year',
+          lookBackAdditional: this.lookBackAdditional,
+          lookBackAdditionalUnit: this.lookBackAdditionalUnit,
+          lookAheadAdditional: this.lookAheadAdditional,
+          lookAheadAdditionalUnit: this.lookAheadAdditionalUnit
+        })
+        const grain = this.timeframeGranularity || 'Month'
         leafColumns = []
-        dateMembers.forEach(date => {
-          const primaryId = isForecastLookBack(date, cutover) ? lookBackId : lookAheadId
+        const axisDates = dateMembers.length ? dateMembers : membersOf(dateDim).filter(item => item.id)
+        axisDates.forEach(date => {
+          const lookBack = isForecastLookBack(date, cutover)
+          const primaryId = lookBack ? lookBackId : lookAheadId
           const versionIds = [primaryId].concat(extraVersions).filter((id, index, list) => id && list.indexOf(id) === index)
+          const displayDate = {
+            id: date.id || date.label,
+            label: formatForecastDateLabel(date, lookBack && /year/i.test(String(this.lookBackAdditionalUnit || 'Year')) ? 'Year' : grain)
+          }
           ;(versionIds.length ? versionIds : ['']).forEach(versionId => {
             measures.forEach(measure => {
               leafColumns.push({
                 measure,
-                date,
+                date: displayDate,
                 versionId,
                 versionLabel: versionNameOf(versionMembers, versionId) || versionId || '(all)',
-                key: [date.id, versionId, measure.key].join('|')
+                lookAhead: !lookBack,
+                key: [displayDate.id, versionId, measure.key].join('|')
               })
             })
           })
@@ -1138,10 +1302,10 @@
         table += '</tr>'
       }
       if (forecastMode && dateDim && leafColumns.some(column => column.date)) {
-        appendGroupedRow(dateDim, column => column.date)
         if (versionDim) {
           appendGroupedRow(versionDim, column => ({ id: column.versionId, label: column.versionLabel }))
         }
+        appendGroupedRow(dateDim, column => column.date)
       } else if (versionDim && selectorDims.some(isVersionDim) && leafColumns.some(column => column.versionId)) {
         expandedDims.filter(dimension => !isVersionDim(dimension)).forEach(dimension => {
           appendGroupedRow(dimension, column => (column.stack && column.stack[dimension.key]) || null)
@@ -1192,7 +1356,9 @@
         table += `<th class="row-dim-name" style="${cellChrome}"></th>`
       }
       leafColumns.forEach(column => {
-        const barKind = isActualVersion(column.versionLabel || column.versionId) ? 'actual' : (column.versionId ? 'plan' : '')
+        const barKind = column.lookAhead || (!isActualVersion(column.versionLabel || column.versionId) && column.versionId)
+          ? 'plan'
+          : 'actual'
         table += `<th class="measure-bar${barKind ? ' ' + barKind : ''}" style="${cellChrome}"></th>`
       })
       table += '</tr>'

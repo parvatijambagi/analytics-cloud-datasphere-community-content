@@ -436,9 +436,16 @@
         this._renderRules()
       })
       this._shadowRoot.getElementById('apply').addEventListener('click', () => this._apply())
-      this._shadowRoot.getElementById('apply-forecast').addEventListener('click', () => this._applyTableType())
-      this._shadowRoot.getElementById('cancel-forecast').addEventListener('click', () => this._loadTableType())
+      this._shadowRoot.getElementById('apply-forecast').addEventListener('click', () => {
+        this._forecastDirty = false
+        this._applyTableType()
+      })
+      this._shadowRoot.getElementById('cancel-forecast').addEventListener('click', () => {
+        this._forecastDirty = false
+        this._loadTableType()
+      })
       this._draftExtra = []
+      this._forecastDirty = false
       this._versions = [{ id: 'Actual', name: 'Actual' }, { id: 'EPMplusA', name: 'EPMplusA' }, { id: 'Budget', name: 'Budget' }, { id: 'Forecast', name: 'Forecast' }]
       this._dates = [{ id: 'Today', name: 'Today' }, { id: 'Current Period', name: 'Current Period' }]
       this._shadowRoot.querySelectorAll('.tab').forEach(tab => {
@@ -451,8 +458,8 @@
       })
       const byId = id => this._shadowRoot.getElementById(id)
       byId('tableType').addEventListener('change', () => {
+        this._forecastDirty = true
         this._toggleForecast()
-        this._applyTableType()
       })
       byId('swap-axes').addEventListener('click', () => {
         this.dispatchEvent(new CustomEvent('propertiesChanged', {
@@ -464,17 +471,13 @@
           if (id === 'cutOverMode') {
             this._syncCutOverUi()
           }
-          if (byId('tableType').value === 'Forecast') {
-            this._applyTableType()
-          }
+          this._forecastDirty = true
         })
       })
       const step = (id, delta) => {
         const input = byId(id)
         input.value = String(Math.max(0, (Number(input.value) || 0) + delta))
-        if (byId('tableType').value === 'Forecast') {
-          this._applyTableType()
-        }
+        this._forecastDirty = true
       }
       byId('lookBackMinus').addEventListener('click', () => step('lookBackAdditional', -1))
       byId('lookBackPlus').addEventListener('click', () => step('lookBackAdditional', 1))
@@ -486,9 +489,7 @@
           deltaBasedOn: 'Forecast Layout'
         })
         this._renderExtra()
-        if (byId('tableType').value === 'Forecast') {
-          this._applyTableType()
-        }
+        this._forecastDirty = true
       })
       byId('new-input-control').addEventListener('click', () => {
         this._shadowRoot.getElementById('cutover-hint').textContent =
@@ -612,17 +613,13 @@
         this._fillMemberSelect(versionSelect, this._versions, item.version)
         versionSelect.addEventListener('change', () => {
           this._draftExtra[index].version = versionSelect.value
-          if (this._val('tableType') === 'Forecast') {
-            this._applyTableType()
-          }
+          this._forecastDirty = true
         })
         const deltaSelect = document.createElement('select')
         this._fillMemberSelect(deltaSelect, deltaItems, item.deltaBasedOn || 'Forecast Layout')
         deltaSelect.addEventListener('change', () => {
           this._draftExtra[index].deltaBasedOn = deltaSelect.value
-          if (this._val('tableType') === 'Forecast') {
-            this._applyTableType()
-          }
+          this._forecastDirty = true
         })
         const del = document.createElement('button')
         del.type = 'button'
@@ -632,9 +629,7 @@
         del.addEventListener('click', () => {
           this._draftExtra.splice(index, 1)
           this._renderExtra()
-          if (this._val('tableType') === 'Forecast') {
-            this._applyTableType()
-          }
+          this._forecastDirty = true
         })
         wrap.appendChild(versionSelect)
         wrap.appendChild(deltaSelect)
@@ -824,6 +819,10 @@
     }
 
     _loadTableType () {
+      if (this._forecastDirty) {
+        this._toggleForecast()
+        return
+      }
       const type = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
       this._shadowRoot.getElementById('tableType').value = type
       const setIf = (id, value) => {

@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate forecast helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel }\n')()
 
 const today = api.resolveCutOver('Today', { mode: 'Today' })
 if (!(today instanceof Date) || Number.isNaN(today.getTime())) {
@@ -46,6 +46,31 @@ const viaMode = api.resolveCutOver('LastBooked', {
 })
 if (viaMode.getTime() !== last.getTime()) {
   throw new Error('LastBooked mode should match last booked actual date')
+}
+
+const axis = api.pickForecastDateMembers([
+  { id: '2025', label: '2025' },
+  { id: '2026-01', label: 'Jan 2026' },
+  { id: '2026-07', label: 'Jul 2026' },
+  { id: '2026-12', label: 'Dec 2026' },
+  { id: '2027-01', label: 'Jan 2027' }
+], new Date(2026, 6, 31), {
+  granularity: 'Month',
+  range: 'Year',
+  lookBackAdditional: 1,
+  lookBackAdditionalUnit: 'Year',
+  lookAheadAdditional: 1,
+  lookAheadAdditionalUnit: 'Year'
+})
+if (!axis.some(item => item.id === '2025')) {
+  throw new Error('Look back additional 1 year should include 2025, got ' + axis.map(item => item.id).join(','))
+}
+if (!axis.some(item => item.id === '2026-01') || !axis.some(item => item.id === '2026-12')) {
+  throw new Error('Range year at month grain should include 2026 months')
+}
+const period = api.formatForecastDateLabel({ id: '2026-01', label: 'Jan 2026' }, 'Month')
+if (period !== 'P01 (2026)') {
+  throw new Error('Month grain should format as P01 (2026), got ' + period)
 }
 
 console.log('forecast layout tests passed')
