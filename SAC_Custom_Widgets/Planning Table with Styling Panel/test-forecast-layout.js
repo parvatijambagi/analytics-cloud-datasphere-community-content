@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate forecast helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType, versionMatches, sameForecastDate }\n')()
 
 const p01 = api.parseLooseDate('P01 (2026)')
 if (!p01 || p01.getFullYear() !== 2025 || p01.getMonth() !== 9) {
@@ -120,6 +120,21 @@ if (synthIds.join(',') !== '2025,P01 (2026),P02 (2026),P03 (2026),P04 (2026),P05
 const mergedEmpty = api.mergeForecastAxis([], synth)
 if (mergedEmpty.map(item => item.id).join(',') !== synthIds.join(',')) {
   throw new Error('Empty result set must still use the synthetic forecast axis')
+}
+
+const sacDate = api.parseLooseDate('[Date].[YQM].&[202510]')
+if (!sacDate || sacDate.getFullYear() !== 2025 || sacDate.getMonth() !== 9) {
+  throw new Error('SAC calendar member 202510 should be Oct 2025, got ' + (sacDate && sacDate.toISOString()))
+}
+const fiscalMember = api.parseLooseDate('[Date].[FISCALYEAR].[2026].[FISCALPERIOD].[001]')
+if (!fiscalMember || api.fiscalYearOf(fiscalMember) !== 2026 || api.fiscalPeriodOf(fiscalMember) !== 1) {
+  throw new Error('SAC fiscal P01 2026 should parse as Oct-start P01')
+}
+if (!api.versionMatches({ id: '[Version].[public.Actual]', label: 'Actual' }, 'Actual')) {
+  throw new Error('Version Actual should match public.Actual member ids')
+}
+if (!api.sameForecastDate({ id: '[Date].&[202510]', label: 'Oct 2025' }, { id: 'P01 (2026)', label: 'P01 (2026)' })) {
+  throw new Error('Oct 2025 actuals should land in P01 (2026)')
 }
 
 console.log('forecast layout tests passed')

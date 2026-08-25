@@ -458,7 +458,13 @@
       })
       const byId = id => this._shadowRoot.getElementById(id)
       byId('tableType').addEventListener('change', () => {
-        this._forecastDirty = true
+        const type = this._val('tableType')
+        if (type === 'Cross-Tab') {
+          this._forecastDirty = false
+          this._applyTableType()
+        } else {
+          this._forecastDirty = true
+        }
         this._toggleForecast()
       })
       byId('swap-axes').addEventListener('click', () => {
@@ -823,7 +829,9 @@
         this._toggleForecast()
         return
       }
-      const type = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
+      const type = /forecast/i.test(String(this.tableType || '')) && !/cross[- ]?tab/i.test(String(this.tableType || ''))
+        ? 'Forecast'
+        : 'Cross-Tab'
       this._shadowRoot.getElementById('tableType').value = type
       const setIf = (id, value) => {
         if (value != null && this._shadowRoot.getElementById(id)) {
@@ -999,6 +1007,11 @@
       assign('showTotals', changedProps.showTotals)
       assign('showToolbar', changedProps.showToolbar)
       assign('readOnly', changedProps.readOnly)
+      ;['tableType', 'lookBackOn', 'lookAheadOn', 'cutOverMode', 'cutOverDate', 'timeframeType', 'timeframeGranularity', 'timeframeRange', 'lookBackAdditional', 'lookBackAdditionalUnit', 'lookAheadAdditional', 'lookAheadAdditionalUnit', 'sumFor', 'additionalVersionsJson'].forEach(key => {
+        if (changedProps && changedProps[key] !== undefined) {
+          this[key] = changedProps[key]
+        }
+      })
       const binding = (changedProps && changedProps.dataBinding) || this.dataBinding
       this._renderColumnDimList(binding, this.columnDimension || colMode)
       this._loadTableType()
