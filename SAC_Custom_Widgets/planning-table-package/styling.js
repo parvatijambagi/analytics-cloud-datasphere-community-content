@@ -512,8 +512,12 @@
       })
       this._typeWarnOpen = false
       this._pendingTableType = ''
+      this._suppressTypeChange = false
       const byId = id => this._shadowRoot.getElementById(id)
       byId('tableType').addEventListener('change', () => {
+        if (this._suppressTypeChange) {
+          return
+        }
         const next = byId('tableType').value
         const current = this._committedTableType()
         if (next === current) {
@@ -521,18 +525,12 @@
           this._pendingTableType = ''
           byId('type-warn').classList.add('hidden')
           this._toggleForecast()
-          this.dispatchEvent(new CustomEvent('propertiesChanged', {
-            detail: { properties: { pendingTableType: '' } }
-          }))
           return
         }
         this._pendingTableType = next
         this._typeWarnOpen = true
         byId('type-warn').classList.remove('hidden')
         this._toggleForecast()
-        this.dispatchEvent(new CustomEvent('propertiesChanged', {
-          detail: { properties: { pendingTableType: next } }
-        }))
       })
       byId('confirm-table-type').addEventListener('click', () => this._confirmTableType())
       byId('cancel-table-type').addEventListener('click', () => this._cancelTableType())
@@ -682,11 +680,10 @@
       this._typeWarnOpen = false
       this._pendingTableType = ''
       this._shadowRoot.getElementById('type-warn').classList.add('hidden')
+      this._suppressTypeChange = true
       this._shadowRoot.getElementById('tableType').value = this._committedTableType()
+      this._suppressTypeChange = false
       this._toggleForecast()
-      this.dispatchEvent(new CustomEvent('propertiesChanged', {
-        detail: { properties: { pendingTableType: '' } }
-      }))
     }
 
     _fillMemberSelect (select, items, current) {
@@ -937,18 +934,12 @@
     }
 
     _loadTableType () {
-      const pending = String(this.pendingTableType || '')
-      const committed = this._committedTableType()
-      if (pending && pending !== committed) {
-        this._pendingTableType = pending
-        this._typeWarnOpen = true
-        this._shadowRoot.getElementById('tableType').value = pending
-        this._shadowRoot.getElementById('type-warn').classList.remove('hidden')
-      } else {
+      if (!this._typeWarnOpen) {
         this._pendingTableType = ''
-        this._typeWarnOpen = false
-        this._shadowRoot.getElementById('tableType').value = committed
         this._shadowRoot.getElementById('type-warn').classList.add('hidden')
+        this._suppressTypeChange = true
+        this._shadowRoot.getElementById('tableType').value = this._committedTableType()
+        this._suppressTypeChange = false
       }
       const setIf = (id, value) => {
         if (value != null && this._shadowRoot.getElementById(id)) {
@@ -990,8 +981,7 @@
             lookAheadAdditional: Number(this._val('lookAheadAdditional') || 0),
             lookAheadAdditionalUnit: this._val('lookAheadAdditionalUnit'),
             sumFor: this._val('sumFor'),
-            additionalVersionsJson: JSON.stringify((this._draftExtra || []).filter(item => item && item.version)),
-            pendingTableType: ''
+            additionalVersionsJson: JSON.stringify((this._draftExtra || []).filter(item => item && item.version))
           }
         }
       }))

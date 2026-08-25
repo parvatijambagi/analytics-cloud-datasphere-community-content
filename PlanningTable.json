@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table-v13",
       "url": "/main-v13.js",
-      "integrity": "sha256-sFqNZc674W5XUKebMswLLxqbtTfkh9e9lE5fOy8YMqw=",
+      "integrity": "sha256-/yUFNh1Gy2QzHdsScE1jeDcTAjeGXzssFInAP2XKUac=",
       "ignoreIntegrity": true
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling-v13",
       "url": "/styling-v13.js",
-      "integrity": "sha256-klHigp7Es1rAvlNggN+4mKVnGPraYoWv4XoOKGozuQo=",
+      "integrity": "sha256-dSAeTuEZLopxXPwD6wVLRdvn/4FHXs7GT+G5eXdfOAo=",
       "ignoreIntegrity": true
     }
   ],
@@ -179,11 +179,6 @@
       "type": "string",
       "default": "Cross-Tab",
       "description": "Cross-Tab or Forecast Layout"
-    },
-    "pendingTableType": {
-      "type": "string",
-      "default": "",
-      "description": "Requested table type waiting for the Change Table Type warning"
     },
     "lookBackOn": {
       "type": "string",
