@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate forecast helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType }\n')()
 
 const p01 = api.parseLooseDate('P01 (2026)')
 if (!p01 || p01.getFullYear() !== 2025 || p01.getMonth() !== 9) {
@@ -96,6 +96,30 @@ if (kept !== 'P01 (2026)') {
 const yearLabel = api.formatForecastDateLabel({ id: '2025', label: '2025' }, 'Year')
 if (yearLabel !== '2025') {
   throw new Error('Extra look-back year should label 2025, got ' + yearLabel)
+}
+
+if (!api.isForecastTableType('Forecast') || !api.isForecastTableType('Forecast Layout')) {
+  throw new Error('Forecast table type should be recognized')
+}
+if (api.isForecastTableType('Cross-Tab')) {
+  throw new Error('Cross-Tab must not be treated as forecast')
+}
+
+const synth = api.synthesizeForecastAxis(new Date(2026, 7, 25), {
+  granularity: 'Month',
+  range: 'Year',
+  lookBackAdditional: 1,
+  lookBackAdditionalUnit: 'Year',
+  lookAheadAdditional: 1,
+  lookAheadAdditionalUnit: 'Year'
+})
+const synthIds = synth.map(item => item.id)
+if (synthIds.join(',') !== '2025,P01 (2026),P02 (2026),P03 (2026),P04 (2026),P05 (2026),P06 (2026),P07 (2026),P08 (2026),P09 (2026),P10 (2026),P11 (2026),P12 (2026),2027') {
+  throw new Error('Synthetic axis should be 2025, P01-P12 (2026), 2027, got ' + synthIds.join(','))
+}
+const mergedEmpty = api.mergeForecastAxis([], synth)
+if (mergedEmpty.map(item => item.id).join(',') !== synthIds.join(',')) {
+  throw new Error('Empty result set must still use the synthetic forecast axis')
 }
 
 console.log('forecast layout tests passed')

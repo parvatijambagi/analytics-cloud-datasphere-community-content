@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.8'
+  const WIDGET_VERSION = '1.3.9'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -581,6 +581,113 @@
     })
   }
 
+  const isForecastTableType = value => /forecast/i.test(String(value || '')) && !/cross[- ]?tab/i.test(String(value || ''))
+
+  const synthesizeForecastAxis = (cutover, settings) => {
+    const opts = settings || {}
+    const grain = grainKeyOf(opts.granularity || 'Month')
+    const range = opts.range || 'Year'
+    const lookBackN = Number(opts.lookBackAdditional || 0)
+    const lookBackUnit = opts.lookBackAdditionalUnit || 'Year'
+    const lookAheadN = Number(opts.lookAheadAdditional || 0)
+    const lookAheadUnit = opts.lookAheadAdditionalUnit || 'Year'
+    const pivot = cutover instanceof Date && !Number.isNaN(cutover.getTime()) ? cutover : new Date()
+    const rangeStart = startOfPeriod(pivot, range)
+    const rangeEnd = endOfPeriod(pivot, range)
+    const fy = fiscalYearOf(pivot)
+    const members = []
+    if (lookBackN > 0 && /year/i.test(lookBackUnit)) {
+      for (let i = lookBackN; i >= 1; i--) {
+        const year = String(fy - i)
+        members.push({ id: year, label: year })
+      }
+    }
+    if (grain === 'year') {
+      members.push({ id: String(fy), label: String(fy) })
+    } else if (grain === 'quarter') {
+      for (let q = 1; q <= 4; q++) {
+        const start = fiscalPeriodStart(fy, (q - 1) * 3 + 1)
+        if (start >= rangeStart && start <= rangeEnd) {
+          const label = fy + ' Q' + q
+          members.push({ id: label, label: label })
+        }
+      }
+    } else {
+      for (let period = 1; period <= 12; period++) {
+        const start = fiscalPeriodStart(fy, period)
+        if (start < rangeStart || start > rangeEnd) {
+          continue
+        }
+        const label = 'P' + String(period).padStart(2, '0') + ' (' + fy + ')'
+        members.push({ id: label, label: label })
+      }
+    }
+    if (lookAheadN > 0 && /year/i.test(lookAheadUnit)) {
+      for (let i = 1; i <= lookAheadN; i++) {
+        const year = String(fy + i)
+        members.push({ id: year, label: year })
+      }
+    }
+    return members
+  }
+
+  const mergeForecastAxis = (fromData, synthesized) => {
+    const synth = synthesized || []
+    if (!synth.length) {
+      return fromData || []
+    }
+    const dataMonths = (fromData || []).filter(item => memberHierarchyDepth(item) >= 3)
+    if (!dataMonths.length) {
+      return synth
+    }
+    const seen = new Set()
+    const out = []
+    const add = member => {
+      const id = member && (member.id || member.label)
+      if (!id || seen.has(id)) {
+        return
+      }
+      seen.add(id)
+      out.push(member)
+    }
+    synth.forEach(member => {
+      if (memberHierarchyDepth(member) <= 1) {
+        add(member)
+        return
+      }
+      const want = memberDate(member)
+      const match = dataMonths.find(item => {
+        const date = memberDate(item)
+        return date && want && fiscalYearOf(date) === fiscalYearOf(want) && fiscalPeriodOf(date) === fiscalPeriodOf(want)
+      })
+      add(match || member)
+    })
+    return out
+  }
+
+  const sameForecastDate = (cell, columnDate) => {
+    if (!columnDate) {
+      return true
+    }
+    const id = String((cell && cell.id) || '')
+    const label = String((cell && cell.label) || '')
+    if (!id && !label) {
+      return false
+    }
+    if (id === columnDate.id || label === columnDate.id || label === columnDate.label || id === columnDate.label) {
+      return true
+    }
+    const a = memberDate({ id: id, label: label })
+    const b = memberDate(columnDate)
+    if (!a || !b) {
+      return false
+    }
+    if (memberHierarchyDepth(columnDate) <= 1) {
+      return fiscalYearOf(a) === fiscalYearOf(b)
+    }
+    return fiscalYearOf(a) === fiscalYearOf(b) && fiscalPeriodOf(a) === fiscalPeriodOf(b)
+  }
+
   const drillOptionsFor = dimension => {
     if (isDateDim(dimension)) {
       return [
@@ -1020,6 +1127,10 @@
       }
       if (changedProps && changedProps.tableType) {
         this._lastTableType = changedProps.tableType
+        if (isForecastTableType(changedProps.tableType)) {
+          this._forecastPrimeStarted = false
+          this._primeForecastDateMembers()
+        }
       }
       if (!this._editing) {
         this.render()
@@ -1167,9 +1278,9 @@
         view = view.filter(row => ((row[dimension.key] && row[dimension.key].id) || '') === selected)
       })
 
-      const forecastMode = String(this.tableType || 'Cross-Tab') === 'Forecast'
-      const dateDim = selectorDims.concat(rowDims).find(isDateDim) || null
-      const versionDim = selectorDims.concat(rowDims).find(isVersionDim) || null
+      const forecastMode = isForecastTableType(this.tableType)
+      const dateDim = selectorDims.concat(rowDims).find(isDateDim) || dimensions.find(isDateDim) || null
+      const versionDim = selectorDims.concat(rowDims).find(isVersionDim) || dimensions.find(isVersionDim) || null
       let extraVersions = []
       try {
         const parsed = JSON.parse(this.additionalVersionsJson || '[]')
@@ -1187,11 +1298,19 @@
       let stackedDims = selectorDims.slice()
       let leafColumns = measures.map(measure => ({ measure, date: null, versionId: '', versionLabel: '', key: measure.key }))
       if (forecastMode && dateDim) {
-        stackedDims = selectorDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
+        stackedDims = selectorDims.filter(dimension =>
+          dimension.key !== dateDim.key &&
+          (!versionDim || dimension.key !== versionDim.key)
+        )
         rowDims = rowDims.filter(dimension => dimension.key !== dateDim.key && (!versionDim || dimension.key !== versionDim.key))
         const versionMembers = versionDim ? membersOf(versionDim) : []
         const lookBackId = this.lookBackOn || (versionMembers.find(item => /actual/i.test(String(item.label || item.id))) || { id: 'Actual' }).id
-        const lookAheadId = this.lookAheadOn || (versionMembers.find(item => /\bfc\b|epmplusa|forecast/i.test(String(item.label || item.id))) || { id: 'FC' }).id
+        const namedAhead = this.lookAheadOn
+        const aheadInModel = namedAhead && versionMembers.some(item => versionMatches(item, namedAhead) || String(item.label) === String(namedAhead))
+        const lookAheadId = (aheadInModel && namedAhead) ||
+          (versionMembers.find(item => /\bfc\b|forecast/i.test(String(item.label || item.id))) ||
+            versionMembers.find(item => /epmplusa/i.test(String(item.label || item.id))) ||
+            { id: namedAhead || 'FC' }).id
         const allDates = membersOf(dateDim).filter(item => item.id || item.label)
         const cutover = resolveCutOver(this.cutOverDate, {
           mode: this.cutOverMode || this.cutOverDate,
@@ -1202,17 +1321,21 @@
           dateMembers: allDates,
           actualToken: lookBackId
         })
-        const dateMembers = pickForecastDateMembers(allDates, cutover, {
+        const forecastSettings = {
           granularity: this.timeframeGranularity || 'Month',
           range: this.timeframeRange || 'Year',
           lookBackAdditional: this.lookBackAdditional,
           lookBackAdditionalUnit: this.lookBackAdditionalUnit,
           lookAheadAdditional: this.lookAheadAdditional,
           lookAheadAdditionalUnit: this.lookAheadAdditionalUnit
-        })
+        }
+        const dateMembers = mergeForecastAxis(
+          pickForecastDateMembers(allDates.concat(this._forecastDateMembers || []), cutover, forecastSettings),
+          synthesizeForecastAxis(cutover, forecastSettings)
+        )
         const grain = this.timeframeGranularity || 'Month'
         leafColumns = []
-        const axisDates = dateMembers.length ? dateMembers : membersOf(dateDim).filter(item => item.id)
+        const axisDates = dateMembers.length ? dateMembers : synthesizeForecastAxis(cutover, forecastSettings)
         axisDates.forEach(date => {
           const lookBack = isForecastLookBack(date, cutover)
           const primaryId = lookBack ? lookBackId : lookAheadId
@@ -1237,6 +1360,7 @@
         if (!leafColumns.length) {
           leafColumns = measures.map(measure => ({ measure, date: null, versionId: '', versionLabel: '', key: measure.key }))
         }
+        this._primeForecastDateMembers()
       } else if (versionDim && selectorDims.some(isVersionDim)) {
         stackedDims = selectorDims.filter(dimension => dimension.key !== versionDim.key)
         rowDims = rowDims.filter(dimension => dimension.key !== versionDim.key)
@@ -1248,19 +1372,18 @@
       }
       const expandedDims = []
       const dateAlready = !!(forecastMode && dateDim && leafColumns.some(column => column.date))
-      selectorDims.forEach(dimension => {
-        if (isVersionDim(dimension)) {
-          return
-        }
-        if (dateAlready && dateDim && dimension.key === dateDim.key) {
-          return
-        }
-        const level = this._drillLevels[dimension.key] || 'all'
-        const members = filterMembersByLevel(membersOf(dimension), level)
-        const tokens = members.length ? members : [{ id: '', label: '(all)' }]
-        leafColumns = multiplyLeavesByMembers(leafColumns, dimension.key, tokens, isDateDim(dimension))
-        expandedDims.push(dimension)
-      })
+      if (!dateAlready) {
+        selectorDims.forEach(dimension => {
+          if (isVersionDim(dimension)) {
+            return
+          }
+          const level = this._drillLevels[dimension.key] || 'all'
+          const members = filterMembersByLevel(membersOf(dimension), level)
+          const tokens = members.length ? members : [{ id: '', label: '(all)' }]
+          leafColumns = multiplyLeavesByMembers(leafColumns, dimension.key, tokens, isDateDim(dimension))
+          expandedDims.push(dimension)
+        })
+      }
       stackedDims = stackedDims.filter(dimension => !expandedDims.some(item => item.key === dimension.key) && !isVersionDim(dimension))
       this._dimensions = rowDims.concat(stackedDims)
 
@@ -1402,8 +1525,7 @@
             return false
           }
           if (column.date && dateDim) {
-            const dateId = (item[dateDim.key] && item[dateDim.key].id) || ''
-            if (dateId !== column.date.id) {
+            if (!sameForecastDate(item[dateDim.key] || {}, column.date)) {
               return false
             }
           }
@@ -1532,6 +1654,57 @@
       } catch (ignore) {
         return null
       }
+    }
+
+    _primeForecastDateMembers () {
+      if (this._forecastPrimeStarted || !isForecastTableType(this.tableType)) {
+        return
+      }
+      const binding = this._resolveDataBinding()
+      const metadata = binding && binding.metadata
+      const dimensions = parseMetadata(metadata).dimensions
+      const dateDim = (dimensions || []).find(isDateDim)
+      if (!dateDim) {
+        return
+      }
+      this._forecastPrimeStarted = true
+      const ds = this._getDataSource()
+      const dimId = dateDim.id || dateDim.key
+      const finish = members => {
+        const list = (members || []).map(item => {
+          if (!item) {
+            return null
+          }
+          if (typeof item === 'string') {
+            return { id: item, label: item }
+          }
+          const id = item.id || item.Id || item.memberId
+          if (!id || /^(\(all\)|all)$/i.test(String(id).trim())) {
+            return null
+          }
+          return { id: String(id), label: String(item.description || item.label || item.name || id) }
+        }).filter(Boolean)
+        if (list.length) {
+          this._forecastDateMembers = list
+          if (!this._editing) {
+            this.render()
+          }
+        }
+      }
+      Promise.resolve().then(async () => {
+        try {
+          if (ds && typeof ds.setHierarchyLevel === 'function') {
+            try {
+              await ds.setHierarchyLevel(dimId, 3)
+            } catch (ignore) {}
+          }
+          if (ds && typeof ds.getMembers === 'function') {
+            finish(await ds.getMembers(dimId))
+          }
+        } catch (ignore) {
+          this._forecastPrimeStarted = false
+        }
+      })
     }
 
     _bindDrillMenus (dimensions) {
