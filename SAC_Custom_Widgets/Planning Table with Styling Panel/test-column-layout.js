@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate layout helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, expandVersionLeafColumns, sortVersionMembers }\n')()
 
 const metadata = {
   dimensions: {
@@ -56,6 +56,22 @@ if (autoRows.map(d => d.description).join(',') !== 'ARE,Cost Center') {
 }
 if (autoCols.map(d => d.description).join(',') !== 'Date,GL-Accounts,Version') {
   throw new Error('Auto should stack Date/GL/Version, got ' + autoCols.map(d => d.description).join(','))
+}
+
+const versions = api.sortVersionMembers([
+  { id: 'BDG', label: 'BDG' },
+  { id: 'FC', label: 'FC' },
+  { id: 'Actual', label: 'Actual' }
+])
+if (versions.map(item => item.label).join(',') !== 'Actual,FC,BDG') {
+  throw new Error('Versions should order Actual, FC, BDG, got ' + versions.map(item => item.label).join(','))
+}
+const leaves = api.expandVersionLeafColumns([{ key: 'LC', label: 'Local Currency' }], versions)
+if (leaves.map(item => item.versionLabel).join(',') !== 'Actual,FC,BDG') {
+  throw new Error('Each version should be its own column group, got ' + leaves.map(item => item.versionLabel).join(','))
+}
+if (leaves.some(item => !item.versionId)) {
+  throw new Error('Version columns must not collapse to (all)')
 }
 
 console.log('column layout tests passed')

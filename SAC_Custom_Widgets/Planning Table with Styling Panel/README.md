@@ -30,9 +30,11 @@ The ZIP must keep `main-v13.js` and `styling-v13.js` at the archive root. Those 
 
 If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-**Re-upload JSON + ZIP** (widget version **1.3.8**). The toolbar must show **v1.3.8**. **Builder is native SAC** (same as 1.3.2): Rows, Columns with Measures nested, Filters, and the model dimension/measure lists. A custom Builder was what removed those pickers.
+**Re-upload JSON + ZIP** (widget version **1.3.9**). The toolbar must show **v1.3.9**. **Builder is native SAC** (same as 1.3.2): Rows, Columns with Measures nested, Filters, and the model dimension/measure lists. A custom Builder was what removed those pickers.
 
 SAC custom widgets only have **Builder** and **Styling** tabs. **Table Type** is a tab inside **Styling** (Table Type | Styling). Use it to choose Cross-Tab or Forecast Layout. Do not install a custom Builder panel.
+
+Changing **Table Type** from Cross-Tab to Forecast Layout (or back) shows a **Warning**: changing the table type will clear filters, sort, dimension and measure input controls, styling, and more. **Change Table Type** applies the new type; from Cross-Tab to Forecast it also sets Timeframe Type to **Rolling Forecast**. **Cancel** keeps the previous type.
 
 When **Table Type** is **Forecast Layout**, the panel matches the native forecast options:
 
@@ -43,7 +45,7 @@ When **Table Type** is **Forecast Layout**, the panel matches the native forecas
 - **Sum For** — Cut-Over Year, All, Look Ahead, None
 - **Additional Versions** — Version and Delta Based On (for example BDG vs Forecast Layout), with remove and **+ Add Version**
 
-Cross-Tab layout is unchanged: stacked Date / GL-Accounts / Version under Measures, ARE and Cost Center as row headers.
+Cross-Tab keeps Date and GL-Accounts stacked under Measures. Version members from the bound model (Actual, FC, BDG, and others) are **side-by-side column groups**, each with the measures underneath. They are not a single Version dropdown that forces one selection.
 
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 

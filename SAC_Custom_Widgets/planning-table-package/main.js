@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.8'
+  const WIDGET_VERSION = '1.3.9'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -292,6 +292,51 @@
     return item ? (item.label || item.name || item.id) : (token || '')
   }
 
+  const isActualVersion = token => /actual/i.test(String(token || ''))
+
+  const sortVersionMembers = members => {
+    const rank = item => {
+      const text = String((item && (item.label || item.id)) || '').toLowerCase()
+      if (/actual/.test(text)) {
+        return 0
+      }
+      if (/\bfc\b|forecast/.test(text)) {
+        return 1
+      }
+      if (/\bbdg\b|budget/.test(text)) {
+        return 2
+      }
+      return 3
+    }
+    return (members || []).slice().sort((a, b) => {
+      const diff = rank(a) - rank(b)
+      if (diff) {
+        return diff
+      }
+      return String(a.label || a.id).localeCompare(String(b.label || b.id))
+    })
+  }
+
+  const expandVersionLeafColumns = (measures, versionMembers) => {
+    const versions = (versionMembers || []).filter(item => item && item.id)
+    if (!versions.length) {
+      return measures.map(measure => ({ measure, date: null, versionId: '', versionLabel: '', key: measure.key }))
+    }
+    const leaves = []
+    versions.forEach(ver => {
+      measures.forEach(measure => {
+        leaves.push({
+          measure,
+          date: null,
+          versionId: ver.id,
+          versionLabel: ver.label || ver.id,
+          key: [ver.id, measure.key].join('|')
+        })
+      })
+    })
+    return leaves
+  }
+
   const setupMessage = extra => {
     return `
       <div class="placeholder">
@@ -301,7 +346,7 @@
           <li>Select this widget, open <em>Builder</em> (not Styling).</li>
           <li>Choose a model.</li>
           <li>Add ARE and Cost Center to <em>Rows</em>. Their names appear as row headers under the stacked column dimensions.</li>
-          <li>Add Date, GL-Accounts, and Version to <em>Columns</em>. They stack under Measures as header rows (Date → (all), GL-Accounts → H1_Top, Version → Actual) across each measure column, not as extra row columns next to ARE.</li>
+          <li>Add Date, GL-Accounts, and Version to <em>Columns</em>. Date and GL-Accounts stack under Measures. Version members such as Actual, FC, and BDG become side-by-side column groups, each with the measures underneath.</li>
           <li>Add measures such as Global Currency and Local Currency to <em>Measures</em>.</li>
           <li>For a planning model, set a <em>Version</em> (and Date if required).</li>
         </ol>
@@ -571,6 +616,14 @@
         background: #fff;
         border-bottom: 4px solid #4a5a6a;
       }
+      thead tr.row-headers th.measure-bar.actual {
+        border-bottom: 4px solid #4a5a6a;
+      }
+      thead tr.row-headers th.measure-bar.plan {
+        border-bottom: 4px solid transparent;
+        background: repeating-linear-gradient(-45deg, #9aa4ad, #9aa4ad 2px, #ffffff 2px, #ffffff 5px);
+        background-origin: border-box;
+      }
       select.member-link,
       span.member-link {
         max-width: 100%;
@@ -663,6 +716,12 @@
       Object.assign(this._props, changedProps || {})
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
+      }
+      if (changedProps && changedProps.tableType && this._lastTableType && changedProps.tableType !== this._lastTableType) {
+        this._dimFilters = {}
+      }
+      if (changedProps && changedProps.tableType) {
+        this._lastTableType = changedProps.tableType
       }
       if (!this._editing) {
         this.render()
@@ -797,6 +856,9 @@
       }
       let view = data
       selectorDims.forEach(dimension => {
+        if (isVersionDim(dimension)) {
+          return
+        }
         const selected = this._dimFilters[dimension.key]
         if (!selected) {
           return
@@ -858,6 +920,11 @@
         if (!leafColumns.length) {
           leafColumns = measures.map(measure => ({ measure, date: null, versionId: '', versionLabel: '', key: measure.key }))
         }
+      } else if (versionDim && selectorDims.some(isVersionDim)) {
+        stackedDims = selectorDims.filter(dimension => dimension.key !== versionDim.key)
+        rowDims = rowDims.filter(dimension => dimension.key !== versionDim.key)
+        const versionMembers = sortVersionMembers(membersOf(versionDim).filter(item => item.id))
+        leafColumns = expandVersionLeafColumns(measures, versionMembers)
       }
       this._dimensions = rowDims.concat(stackedDims)
 
@@ -921,6 +988,20 @@
           })
           table += '</tr>'
         }
+      } else if (versionDim && selectorDims.some(isVersionDim) && leafColumns.some(column => column.versionId)) {
+        table += '<tr class="selector">'
+        table += axisLabel(this._escape(dimName(versionDim)), 'axis-label selector')
+        let index = 0
+        while (index < leafColumns.length) {
+          const versionId = leafColumns[index].versionId
+          let span = 0
+          while (index + span < leafColumns.length && leafColumns[index + span].versionId === versionId) {
+            span += 1
+          }
+          table += `<td class="selector" colspan="${span}"><span class="member-link">${this._escape(leafColumns[index].versionLabel)}</span></td>`
+          index += span
+        }
+        table += '</tr>'
       }
       table += '<tr class="axis">'
       table += axisLabel('Measures')
@@ -959,32 +1040,40 @@
       } else {
         table += `<th class="row-dim-name" style="${cellChrome}"></th>`
       }
-      leafColumns.forEach(() => {
-        table += `<th class="measure-bar" style="${cellChrome}"></th>`
+      leafColumns.forEach(column => {
+        const barKind = isActualVersion(column.versionLabel || column.versionId) ? 'actual' : (column.versionId ? 'plan' : '')
+        table += `<th class="measure-bar${barKind ? ' ' + barKind : ''}" style="${cellChrome}"></th>`
       })
       table += '</tr>'
       table += '</thead><tbody>'
 
       const findBound = (row, column) => {
-        if (!column.date) {
-          return row[column.measure.key] || {}
-        }
         const rKey = rowKey(row, rowDims)
         const match = view.find(item => {
           if (rowKey(item, rowDims) !== rKey) {
             return false
           }
-          const dateId = (item[dateDim.key] && item[dateDim.key].id) || ''
-          if (dateId !== column.date.id) {
-            return false
+          if (column.date && dateDim) {
+            const dateId = (item[dateDim.key] && item[dateDim.key].id) || ''
+            if (dateId !== column.date.id) {
+              return false
+            }
           }
-          if (!versionDim || !column.versionId) {
-            return true
+          if (versionDim && column.versionId) {
+            const cell = item[versionDim.key] || {}
+            if (cell.id !== column.versionId && cell.label !== column.versionId) {
+              return false
+            }
           }
-          const cell = item[versionDim.key] || {}
-          return cell.id === column.versionId || cell.label === column.versionId
+          return true
         })
-        return (match && match[column.measure.key]) || {}
+        if (match) {
+          return match[column.measure.key] || {}
+        }
+        if (!column.date && !column.versionId) {
+          return row[column.measure.key] || {}
+        }
+        return {}
       }
 
       rowTuples.forEach((row, rowIndex) => {
@@ -1013,8 +1102,8 @@
           const measureRule = firstMatchingRule(rules, measureKind)
           const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
           if (editable) {
-            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}"${unit} style="${ruleStyle(measureRule, extra)}">`
-            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" />`
+            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" data-version="${this._escape(column.versionId || '')}" data-date="${this._escape((column.date && column.date.id) || '')}"${unit} style="${ruleStyle(measureRule, extra)}">`
+            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" data-version="${this._escape(column.versionId || '')}" data-date="${this._escape((column.date && column.date.id) || '')}" />`
             table += '</td>'
           } else {
             table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
@@ -1057,7 +1146,7 @@
         })
         input.addEventListener('blur', () => {
           this._editing = false
-          this._commitInput(input, rowTuples, rowDims.concat(stackedDims), measures, decimalPlaces, view, [dateDim, versionDim].filter(Boolean))
+          this._commitInput(input, rowTuples, rowDims, measures, decimalPlaces, view, dateDim, versionDim)
         })
         input.addEventListener('keydown', event => {
           if (event.key === 'Enter') {
@@ -1093,20 +1182,35 @@
       } catch (ignore) {}
     }
 
-    _commitInput (input, rowTuples, rowDims, measures, decimalPlaces, data, colDims) {
+    _commitInput (input, rowTuples, rowDims, measures, decimalPlaces, data, dateDim, versionDim) {
       const rowIndex = Number(input.getAttribute('data-row'))
       const measureKey = input.getAttribute('data-measure')
       const colKey = input.getAttribute('data-col') || ''
+      const versionId = input.getAttribute('data-version') || ''
+      const dateId = input.getAttribute('data-date') || ''
       const row = rowTuples[rowIndex]
       const measure = measures.find(item => item.key === measureKey)
       if (!row || !measure) {
         return
       }
-      let source = row
-      if (colDims && colDims.length) {
-        const rKey = rowKey(row, rowDims)
-        source = data.find(item => rowKey(item, rowDims) === rKey && colDims.map(dimension => (item[dimension.key] && item[dimension.key].id) || '').join('|') === colKey) || row
-      }
+      const rKey = rowKey(row, rowDims)
+      const source = data.find(item => {
+        if (rowKey(item, rowDims) !== rKey) {
+          return false
+        }
+        if (dateId && dateDim) {
+          if (((item[dateDim.key] && item[dateDim.key].id) || '') !== dateId) {
+            return false
+          }
+        }
+        if (versionId && versionDim) {
+          const cell = item[versionDim.key] || {}
+          if (cell.id !== versionId && cell.label !== versionId) {
+            return false
+          }
+        }
+        return true
+      }) || row
       const bound = source[measure.key] || {}
       const original = bound.raw
       const parsed = parseInputNumber(input.value)
@@ -1125,7 +1229,8 @@
         return
       }
 
-      const change = toPlanningChange(source, rowDims.concat(colDims || []), measure, original, parsed)
+      const extraDims = [dateDim, versionDim].filter(Boolean)
+      const change = toPlanningChange(source, rowDims.concat(extraDims), measure, original, parsed)
       this._pending.set(key, { value: parsed, change })
       this._lastChange = change
       this.render()
