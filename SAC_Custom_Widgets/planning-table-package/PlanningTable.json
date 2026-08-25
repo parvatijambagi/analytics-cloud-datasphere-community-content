@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table-v13",
       "url": "/main-v13.js",
-      "integrity": "sha256-1BbLJD4m23nYqzj/2aB/G9GFI43/Hnja5OtfVEozDt8=",
+      "integrity": "sha256-85160103ca1fe0dcd2fa4eb6eff58accb629039487f98ff25d625cadec6fcc63",
       "ignoreIntegrity": true
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling-v13",
       "url": "/styling-v13.js",
-      "integrity": "sha256-ChvPpebdIpuim1s3k9wFB6LFY9LgUxzFMWssNtwH+qA=",
+      "integrity": "sha256-0a1bcfa5e6dd229ba29b5b3793dc0507a2c563d2e0531cc5316b2c36dc07faa0",
       "ignoreIntegrity": true
     }
   ],

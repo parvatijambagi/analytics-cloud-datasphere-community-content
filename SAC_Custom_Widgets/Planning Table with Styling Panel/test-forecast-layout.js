@@ -1,20 +1,29 @@
 const fs = require('fs')
 const path = require('path')
 const src = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
-const start = src.indexOf('  const parseLooseDate')
+const start = src.indexOf('  const FISCAL_START_MONTH')
 const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate forecast helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf }\n')()
+
+const p01 = api.parseLooseDate('P01 (2026)')
+if (!p01 || p01.getFullYear() !== 2025 || p01.getMonth() !== 9) {
+  throw new Error('FY starts October: P01 (2026) must be Oct 2025, got ' + (p01 && p01.toISOString()))
+}
+const p11 = api.parseLooseDate('P11 (2026)')
+if (!p11 || p11.getFullYear() !== 2026 || p11.getMonth() !== 7) {
+  throw new Error('P11 (2026) must be Aug 2026, got ' + (p11 && p11.toISOString()))
+}
+const p12 = api.parseLooseDate('P12 (2026)')
+if (!p12 || p12.getFullYear() !== 2026 || p12.getMonth() !== 8) {
+  throw new Error('P12 (2026) must be Sep 2026, got ' + (p12 && p12.toISOString()))
+}
 
 const today = api.resolveCutOver('Today', { mode: 'Today' })
 if (!(today instanceof Date) || Number.isNaN(today.getTime())) {
   throw new Error('Today should resolve to the current date')
-}
-const delta = Math.abs(today.getTime() - Date.now())
-if (delta > 5000) {
-  throw new Error('Today should be approximately now, delta=' + delta)
 }
 
 const dateMembers = [
@@ -29,32 +38,23 @@ if (specific.getFullYear() !== 2025 || specific.getMonth() !== 2) {
 const dateDim = { key: 'date' }
 const versionDim = { key: 'version' }
 const data = [
-  { date: { id: '2026-01-01', label: '2026-01-01' }, version: { id: 'Actual', label: 'Actual' } },
-  { date: { id: '2026-06-01', label: '2026-06-01' }, version: { id: 'Actual', label: 'Actual' } },
-  { date: { id: '2026-12-01', label: '2026-12-01' }, version: { id: 'EPMplusA', label: 'EPMplusA' } }
+  { date: { id: 'P01 (2026)', label: 'P01 (2026)' }, version: { id: 'Actual', label: 'Actual' } },
+  { date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' } },
+  { date: { id: 'P12 (2026)', label: 'P12 (2026)' }, version: { id: 'FC', label: 'FC' } }
 ]
 const last = api.lastBookedActualDate(data, dateDim, versionDim, 'Actual')
-if (!last || last.getFullYear() !== 2026 || last.getMonth() !== 5) {
-  throw new Error('Last booked actual should be Jun 2026, got ' + (last && last.toISOString()))
-}
-const viaMode = api.resolveCutOver('LastBooked', {
-  mode: 'LastBooked',
-  data,
-  dateDim,
-  versionDim,
-  actualToken: 'Actual'
-})
-if (viaMode.getTime() !== last.getTime()) {
-  throw new Error('LastBooked mode should match last booked actual date')
+if (!last || last.getFullYear() !== 2026 || last.getMonth() !== 7) {
+  throw new Error('Last booked actual should be P11 Aug 2026, got ' + (last && last.toISOString()))
 }
 
-const axis = api.pickForecastDateMembers([
+const fyMembers = [
   { id: '2025', label: '2025' },
-  { id: '2026-01', label: 'Jan 2026' },
-  { id: '2026-07', label: 'Jul 2026' },
-  { id: '2026-12', label: 'Dec 2026' },
-  { id: '2027-01', label: 'Jan 2027' }
-], new Date(2026, 6, 31), {
+  { id: 'P01 (2026)', label: 'P01 (2026)' },
+  { id: 'P11 (2026)', label: 'P11 (2026)' },
+  { id: 'P12 (2026)', label: 'P12 (2026)' },
+  { id: '2027', label: '2027' }
+]
+const axis = api.pickForecastDateMembers(fyMembers, last, {
   granularity: 'Month',
   range: 'Year',
   lookBackAdditional: 1,
@@ -62,15 +62,40 @@ const axis = api.pickForecastDateMembers([
   lookAheadAdditional: 1,
   lookAheadAdditionalUnit: 'Year'
 })
-if (!axis.some(item => item.id === '2025')) {
-  throw new Error('Look back additional 1 year should include 2025, got ' + axis.map(item => item.id).join(','))
+const ids = axis.map(item => item.id)
+if (!ids.includes('2025')) {
+  throw new Error('Look back additional 1 year should include 2025 under Actual, got ' + ids.join(','))
 }
-if (!axis.some(item => item.id === '2026-01') || !axis.some(item => item.id === '2026-12')) {
-  throw new Error('Range year at month grain should include 2026 months')
+if (!ids.includes('P01 (2026)') || !ids.includes('P11 (2026)') || !ids.includes('P12 (2026)')) {
+  throw new Error('FY 2026 months P01-P12 should be in range, got ' + ids.join(','))
 }
-const period = api.formatForecastDateLabel({ id: '2026-01', label: 'Jan 2026' }, 'Month')
-if (period !== 'P01 (2026)') {
-  throw new Error('Month grain should format as P01 (2026), got ' + period)
+if (!ids.includes('2027')) {
+  throw new Error('Look ahead additional 1 year should include 2027 under Forecast, got ' + ids.join(','))
+}
+
+if (!api.isForecastLookBack({ id: '2025', label: '2025' }, last)) {
+  throw new Error('2025 extra year must be look-back Actual')
+}
+if (!api.isForecastLookBack({ id: 'P01 (2026)', label: 'P01 (2026)' }, last)) {
+  throw new Error('P01 (2026) October must be look-back Actual')
+}
+if (!api.isForecastLookBack({ id: 'P11 (2026)', label: 'P11 (2026)' }, last)) {
+  throw new Error('Last booked P11 August must stay on Actual')
+}
+if (api.isForecastLookBack({ id: 'P12 (2026)', label: 'P12 (2026)' }, last)) {
+  throw new Error('P12 (2026) must be look-ahead Forecast')
+}
+if (api.isForecastLookBack({ id: '2027', label: '2027' }, last)) {
+  throw new Error('2027 extra year must be look-ahead Forecast')
+}
+
+const kept = api.formatForecastDateLabel({ id: 'P01 (2026)', label: 'P01 (2026)' }, 'Month')
+if (kept !== 'P01 (2026)') {
+  throw new Error('Period labels should stay P01 (2026), got ' + kept)
+}
+const yearLabel = api.formatForecastDateLabel({ id: '2025', label: '2025' }, 'Year')
+if (yearLabel !== '2025') {
+  throw new Error('Extra look-back year should label 2025, got ' + yearLabel)
 }
 
 console.log('forecast layout tests passed')

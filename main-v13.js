@@ -188,6 +188,26 @@
     return dimensions.filter(dimension => !colKeys.has(dimension.key))
   }
 
+  const FISCAL_START_MONTH = 10
+
+  const fiscalYearOf = date => {
+    const month = date.getMonth() + 1
+    const year = date.getFullYear()
+    return month >= FISCAL_START_MONTH ? year + 1 : year
+  }
+
+  const fiscalPeriodOf = date => {
+    const month = date.getMonth() + 1
+    return ((month - FISCAL_START_MONTH + 12) % 12) + 1
+  }
+
+  const fiscalPeriodStart = (fiscalYear, period) => {
+    const fy = Number(fiscalYear)
+    const p = Math.max(1, Math.min(12, Number(period) || 1))
+    const startYear = FISCAL_START_MONTH === 1 ? fy : fy - 1
+    return new Date(startYear, FISCAL_START_MONTH - 1 + (p - 1), 1)
+  }
+
   const parseLooseDate = value => {
     const text = String(value || '').trim()
     if (!text) {
@@ -201,6 +221,14 @@
     if (ymd) {
       return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
     }
+    const periodFirst = text.match(/P\s*(0?[1-9]|1[0-2])\D+(20\d{2}|19\d{2})/i)
+    if (periodFirst) {
+      return fiscalPeriodStart(periodFirst[2], periodFirst[1])
+    }
+    const yearFirst = text.match(/(20\d{2}|19\d{2})\D*P\s*(0?[1-9]|1[0-2])/i)
+    if (yearFirst) {
+      return fiscalPeriodStart(yearFirst[1], yearFirst[2])
+    }
     const yq = text.match(/(\d{4})\D*Q(\d)/i)
     if (yq) {
       return new Date(Number(yq[1]), (Number(yq[2]) - 1) * 3, 1)
@@ -209,13 +237,13 @@
     if (ym) {
       return new Date(Number(ym[1]), Number(ym[2]) - 1, 1)
     }
+    const yearOnly = text.match(/^(20\d{2}|19\d{2})$/)
+    if (yearOnly) {
+      return fiscalPeriodStart(yearOnly[1], 1)
+    }
     const year = text.match(/\b(20\d{2}|19\d{2})\b/)
     if (year) {
-      return new Date(Number(year[1]), 0, 1)
-    }
-    const period = text.match(/P\s*(0?[1-9]|1[0-2])\D+(20\d{2}|19\d{2})/i)
-    if (period) {
-      return new Date(Number(period[2]), Number(period[1]) - 1, 1)
+      return fiscalPeriodStart(year[1], 1)
     }
     const parsed = new Date(text)
     return Number.isNaN(parsed.getTime()) ? null : parsed
@@ -285,10 +313,11 @@
 
   const isForecastLookBack = (member, cutover) => {
     const date = memberDate(member)
-    if (!date) {
+    if (!date || !(cutover instanceof Date)) {
       return true
     }
-    return date.getTime() < cutover.getTime()
+    const bookedEnd = endOfPeriod(cutover, 'month')
+    return date.getTime() <= bookedEnd.getTime()
   }
 
   const versionNameOf = (list, token) => {
@@ -357,7 +386,7 @@
     if (/\d{4}[-./]\d{1,2}[-./]\d{1,2}/.test(text) || /\b(20\d{2}|19\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b/.test(text)) {
       return 4
     }
-    if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/.test(text) || /\d{4}[-./]\d{1,2}\b/.test(text) || /calmonth|\bmonth\b/.test(text)) {
+    if (/\bp\s*(0?[1-9]|1[0-2])\b/.test(text) || /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/.test(text) || /\d{4}[-./]\d{1,2}\b/.test(text) || /calmonth|\bmonth\b/.test(text)) {
       return 3
     }
     if (/\b(20\d{2}|19\d{2})\b/.test(text)) {
@@ -423,7 +452,7 @@
     if (key === 'quarter') {
       return new Date(value.getFullYear(), Math.floor(value.getMonth() / 3) * 3, 1)
     }
-    return new Date(value.getFullYear(), 0, 1)
+    return fiscalPeriodStart(fiscalYearOf(value), 1)
   }
 
   const endOfPeriod = (date, unit) => {
@@ -441,7 +470,8 @@
     if (key === 'quarter') {
       return new Date(start.getFullYear(), start.getMonth() + 3, 0, 23, 59, 59, 999)
     }
-    return new Date(start.getFullYear(), 11, 31, 23, 59, 59, 999)
+    const fyEnd = fiscalPeriodStart(fiscalYearOf(date), 12)
+    return new Date(fyEnd.getFullYear(), fyEnd.getMonth() + 1, 0, 23, 59, 59, 999)
   }
 
   const addPeriods = (date, count, unit) => {
@@ -457,7 +487,7 @@
     } else if (key === 'quarter') {
       value.setMonth(value.getMonth() + (n * 3))
     } else {
-      value.setFullYear(value.getFullYear() + n)
+      return fiscalPeriodStart(fiscalYearOf(value) + n, fiscalPeriodOf(value))
     }
     return value
   }
@@ -487,14 +517,14 @@
     }
     const key = grainKeyOf(grain)
     if (key === 'year') {
-      return String(date.getFullYear())
+      return String(fiscalYearOf(date))
     }
     if (key === 'quarter') {
-      return date.getFullYear() + ' Q' + (Math.floor(date.getMonth() / 3) + 1)
+      return fiscalYearOf(date) + ' Q' + Math.ceil(fiscalPeriodOf(date) / 3)
     }
     if (key === 'month') {
-      const period = String(date.getMonth() + 1).padStart(2, '0')
-      return 'P' + period + ' (' + date.getFullYear() + ')'
+      const period = String(fiscalPeriodOf(date)).padStart(2, '0')
+      return 'P' + period + ' (' + fiscalYearOf(date) + ')'
     }
     return existing || (member && member.id) || ''
   }
@@ -537,8 +567,9 @@
       return filtered.length ? filtered : list
     }
     const backLevel = lookBackUnit.toLowerCase() === 'year' ? 'year' : grainKeyOf(lookBackUnit)
+    const aheadExtraLevel = lookAheadUnit.toLowerCase() === 'year' ? 'year' : grainKeyOf(lookAheadUnit)
     const aheadLevel = grainKeyOf(grain)
-    const picked = pick(lookBackExtra, backLevel).concat(pick(inRange, aheadLevel)).concat(pick(lookAheadExtra, aheadLevel))
+    const picked = pick(lookBackExtra, backLevel).concat(pick(inRange, aheadLevel)).concat(pick(lookAheadExtra, aheadExtraLevel))
     const seen = new Set()
     return picked.filter(member => {
       const id = member.id || member.label
@@ -1188,7 +1219,7 @@
           const versionIds = [primaryId].concat(extraVersions).filter((id, index, list) => id && list.indexOf(id) === index)
           const displayDate = {
             id: date.id || date.label,
-            label: formatForecastDateLabel(date, lookBack && /year/i.test(String(this.lookBackAdditionalUnit || 'Year')) ? 'Year' : grain)
+            label: formatForecastDateLabel(date, memberHierarchyDepth(date) <= 1 ? 'Year' : grain)
           }
           ;(versionIds.length ? versionIds : ['']).forEach(versionId => {
             measures.forEach(measure => {
