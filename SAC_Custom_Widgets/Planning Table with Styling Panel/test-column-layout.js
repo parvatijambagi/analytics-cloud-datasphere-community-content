@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate layout helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, expandVersionLeafColumns, sortVersionMembers }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, expandVersionLeafColumns, sortVersionMembers, filterMembersByLevel, memberHierarchyDepth }\n')()
 
 const metadata = {
   dimensions: {
@@ -72,6 +72,20 @@ if (leaves.map(item => item.versionLabel).join(',') !== 'Actual,FC,BDG') {
 }
 if (leaves.some(item => !item.versionId)) {
   throw new Error('Version columns must not collapse to (all)')
+}
+
+const dates = [
+  { id: '2025', label: '2025' },
+  { id: '2025-Q1', label: '2025 Q1' },
+  { id: '2025-01', label: 'Jan 2025' }
+]
+const years = api.filterMembersByLevel(dates, 'year')
+if (!years.some(item => item.id === '2025')) {
+  throw new Error('Year drill should keep year members')
+}
+const months = api.filterMembersByLevel(dates, 'month')
+if (!months.some(item => item.id === '2025-01')) {
+  throw new Error('Month drill should keep month members')
 }
 
 console.log('column layout tests passed')

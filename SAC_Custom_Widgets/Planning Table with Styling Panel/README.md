@@ -34,8 +34,6 @@ If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity
 
 SAC custom widgets only have **Builder** and **Styling** tabs. **Table Type** is a tab inside **Styling** (Table Type | Styling). Use it to choose Cross-Tab or Forecast Layout. Do not install a custom Builder panel.
 
-Changing **Table Type** from Cross-Tab to Forecast Layout (or back) shows a **Warning**: changing the table type will clear filters, sort, dimension and measure input controls, styling, and more. **Change Table Type** applies the new type; from Cross-Tab to Forecast it also sets Timeframe Type to **Rolling Forecast**. **Cancel** keeps the previous type.
-
 When **Table Type** is **Forecast Layout**, the panel matches the native forecast options:
 
 - **Look Back On** / **Look Ahead On** — Version members from the selected model (result set plus `getMembers` when the data source allows it)
@@ -50,7 +48,7 @@ Cross-Tab keeps Date and GL-Accounts stacked under Measures. Version members fro
 This widget uses the same **native SAC Builder** as the other samples in this repo (Sankey, Nested Pie, bar-gradient). A custom Builder panel would replace SAC’s dimension/measure inventory, so add/remove would not work. Native wells:
 
 - **Rows** — ARE, Cost Center (row header names under the stacked column dimensions)
-- **Columns** — Date, Version, GL-Accounts (stacked header rows under Measures)
+- **Columns** — Date, Version, GL-Accounts (stacked header rows under Measures). Click **›** next to a column dimension to change the hierarchy level (for Date: Year, Quarter, Month, Day).
 - **Measures** — measures or accounts
 
 If **+ Add Dimension** on Columns does not keep a checkbox, the dimension is probably already on **Rows** (SAC will not put the same dimension on two wells). Remove it from Rows, then add it in Columns. If it still does not stick, open **Styling**, choose **Use checked dimensions below**, tick Date / Depthstructure, and Apply.

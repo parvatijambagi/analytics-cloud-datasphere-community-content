@@ -162,57 +162,6 @@
         padding-top: 4px;
         color: #0854a0;
       }
-      .overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(29, 45, 62, 0.32);
-        z-index: 1000;
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
-        padding: 80px 16px 16px;
-      }
-      .warn-dialog {
-        width: 100%;
-        background: #fff;
-        border: 1px solid #d9d9d9;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-      }
-      .warn-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 12px;
-        border-bottom: 1px solid #e5e5e5;
-        color: #6a6d70;
-        font-weight: 700;
-      }
-      .warn-title .bang {
-        color: #e9730c;
-        font-size: 16px;
-        line-height: 1;
-      }
-      .warn-dialog p {
-        margin: 0;
-        padding: 14px 12px;
-        font-size: 12px;
-        line-height: 1.4;
-      }
-      .warn-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        padding: 8px 12px 10px;
-        border-top: 1px solid #e5e5e5;
-      }
-      .warn-actions button {
-        border: 0;
-        background: none;
-        color: #0854a0;
-        font: inherit;
-        cursor: pointer;
-        padding: 6px 8px;
-      }
     </style>
     <div id="root">
       <div class="tabs">
@@ -473,16 +422,6 @@
 
       <button class="apply" id="apply">Apply</button>
       </div>
-      <div id="type-warn" class="overlay hidden">
-        <div class="warn-dialog" role="alertdialog" aria-labelledby="type-warn-title">
-          <div class="warn-title" id="type-warn-title"><span class="bang">⚠</span> Warning</div>
-          <p>Changing the table type will clear filters, sort, dimension and measure input controls, styling, and more.</p>
-          <div class="warn-actions">
-            <button type="button" id="confirm-table-type">Change Table Type</button>
-            <button type="button" id="cancel-table-type">Cancel</button>
-          </div>
-        </div>
-      </div>
     </div>
   `
 
@@ -510,30 +449,11 @@
           this._shadowRoot.getElementById('pane-styling').classList.toggle('hidden', name !== 'styling')
         })
       })
-      this._typeWarnOpen = false
-      this._pendingTableType = ''
-      this._suppressTypeChange = false
       const byId = id => this._shadowRoot.getElementById(id)
       byId('tableType').addEventListener('change', () => {
-        if (this._suppressTypeChange) {
-          return
-        }
-        const next = byId('tableType').value
-        const current = this._committedTableType()
-        if (next === current) {
-          this._typeWarnOpen = false
-          this._pendingTableType = ''
-          byId('type-warn').classList.add('hidden')
-          this._toggleForecast()
-          return
-        }
-        this._pendingTableType = next
-        this._typeWarnOpen = true
-        byId('type-warn').classList.remove('hidden')
         this._toggleForecast()
+        this._applyTableType()
       })
-      byId('confirm-table-type').addEventListener('click', () => this._confirmTableType())
-      byId('cancel-table-type').addEventListener('click', () => this._cancelTableType())
       byId('swap-axes').addEventListener('click', () => {
         this.dispatchEvent(new CustomEvent('propertiesChanged', {
           detail: { properties: { swapAxes: !(this.swapAxes === true || this.swapAxes === 'true') } }
@@ -544,7 +464,7 @@
           if (id === 'cutOverMode') {
             this._syncCutOverUi()
           }
-          if (!this._typeWarnOpen && byId('tableType').value === 'Forecast') {
+          if (byId('tableType').value === 'Forecast') {
             this._applyTableType()
           }
         })
@@ -552,7 +472,7 @@
       const step = (id, delta) => {
         const input = byId(id)
         input.value = String(Math.max(0, (Number(input.value) || 0) + delta))
-        if (!this._typeWarnOpen && byId('tableType').value === 'Forecast') {
+        if (byId('tableType').value === 'Forecast') {
           this._applyTableType()
         }
       }
@@ -566,7 +486,7 @@
           deltaBasedOn: 'Forecast Layout'
         })
         this._renderExtra()
-        if (!this._typeWarnOpen && byId('tableType').value === 'Forecast') {
+        if (byId('tableType').value === 'Forecast') {
           this._applyTableType()
         }
       })
@@ -652,38 +572,8 @@
     }
 
     _toggleForecast () {
-      const isForecast = !this._typeWarnOpen && this._committedTableType() === 'Forecast'
+      const isForecast = this._val('tableType') === 'Forecast'
       this._shadowRoot.getElementById('forecast-panel').classList.toggle('hidden', !isForecast)
-    }
-
-    _committedTableType () {
-      return this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
-    }
-
-    _confirmTableType () {
-      const next = this._pendingTableType || this._val('tableType')
-      this._typeWarnOpen = false
-      this._pendingTableType = ''
-      this._shadowRoot.getElementById('type-warn').classList.add('hidden')
-      this._shadowRoot.getElementById('tableType').value = next
-      if (next === 'Forecast') {
-        const typeSelect = this._shadowRoot.getElementById('timeframeType')
-        if (typeSelect) {
-          typeSelect.value = 'Rolling Forecast'
-        }
-      }
-      this._toggleForecast()
-      this._applyTableType()
-    }
-
-    _cancelTableType () {
-      this._typeWarnOpen = false
-      this._pendingTableType = ''
-      this._shadowRoot.getElementById('type-warn').classList.add('hidden')
-      this._suppressTypeChange = true
-      this._shadowRoot.getElementById('tableType').value = this._committedTableType()
-      this._suppressTypeChange = false
-      this._toggleForecast()
     }
 
     _fillMemberSelect (select, items, current) {
@@ -722,7 +612,7 @@
         this._fillMemberSelect(versionSelect, this._versions, item.version)
         versionSelect.addEventListener('change', () => {
           this._draftExtra[index].version = versionSelect.value
-          if (!this._typeWarnOpen && this._val('tableType') === 'Forecast') {
+          if (this._val('tableType') === 'Forecast') {
             this._applyTableType()
           }
         })
@@ -730,7 +620,7 @@
         this._fillMemberSelect(deltaSelect, deltaItems, item.deltaBasedOn || 'Forecast Layout')
         deltaSelect.addEventListener('change', () => {
           this._draftExtra[index].deltaBasedOn = deltaSelect.value
-          if (!this._typeWarnOpen && this._val('tableType') === 'Forecast') {
+          if (this._val('tableType') === 'Forecast') {
             this._applyTableType()
           }
         })
@@ -742,7 +632,7 @@
         del.addEventListener('click', () => {
           this._draftExtra.splice(index, 1)
           this._renderExtra()
-          if (!this._typeWarnOpen && this._val('tableType') === 'Forecast') {
+          if (this._val('tableType') === 'Forecast') {
             this._applyTableType()
           }
         })
@@ -934,13 +824,8 @@
     }
 
     _loadTableType () {
-      if (!this._typeWarnOpen) {
-        this._pendingTableType = ''
-        this._shadowRoot.getElementById('type-warn').classList.add('hidden')
-        this._suppressTypeChange = true
-        this._shadowRoot.getElementById('tableType').value = this._committedTableType()
-        this._suppressTypeChange = false
-      }
+      const type = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
+      this._shadowRoot.getElementById('tableType').value = type
       const setIf = (id, value) => {
         if (value != null && this._shadowRoot.getElementById(id)) {
           this._shadowRoot.getElementById(id).value = String(value)

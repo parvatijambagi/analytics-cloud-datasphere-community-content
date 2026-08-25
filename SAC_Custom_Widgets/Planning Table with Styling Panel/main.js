@@ -337,6 +337,91 @@
     return leaves
   }
 
+  const memberHierarchyDepth = member => {
+    const id = String((member && member.id) || '')
+    const label = String((member && member.label) || '')
+    const text = (id + ' ' + label).toLowerCase()
+    if (!id && !label) {
+      return 0
+    }
+    if (/^\(all\)$|^all$|^total$/i.test(label.trim()) || /\[all\]|\.all\b/i.test(id)) {
+      return 0
+    }
+    if (/\bq\s*[1-4]\b|quarter/.test(text)) {
+      return 2
+    }
+    if (/\d{4}[-./]\d{1,2}[-./]\d{1,2}/.test(text) || /\b(20\d{2}|19\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b/.test(text)) {
+      return 4
+    }
+    if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/.test(text) || /\d{4}[-./]\d{1,2}\b/.test(text) || /calmonth|\bmonth\b/.test(text)) {
+      return 3
+    }
+    if (/\b(20\d{2}|19\d{2})\b/.test(text)) {
+      return 1
+    }
+    const amps = (id.match(/&\[[^\]]+\]/g) || []).length
+    if (amps) {
+      return amps
+    }
+    const parts = id.split(/[./]/).filter(Boolean)
+    return Math.max(1, parts.length)
+  }
+
+  const filterMembersByLevel = (members, levelKey) => {
+    const list = (members || []).filter(item => item && (item.id || item.label))
+    if (!levelKey || levelKey === 'all') {
+      return list
+    }
+    const mapped = { year: 1, quarter: 2, month: 3, week: 3, day: 4 }
+    const depth = mapped[levelKey] != null ? mapped[levelKey] : Number(levelKey)
+    if (!Number.isFinite(depth)) {
+      return list
+    }
+    const matched = list.filter(item => memberHierarchyDepth(item) === depth)
+    return matched.length ? matched : list
+  }
+
+  const multiplyLeavesByMembers = (leaves, dimKey, members, asDate) => {
+    const vals = (members || []).filter(item => item && (item.id || item.label))
+    if (!vals.length) {
+      return leaves
+    }
+    const out = []
+    vals.forEach(member => {
+      const token = { id: member.id || member.label, label: member.label || member.id }
+      leaves.forEach(leaf => {
+        const next = Object.assign({}, leaf, { stack: Object.assign({}, leaf.stack || {}) })
+        next.stack[dimKey] = token
+        if (asDate) {
+          next.date = token
+        }
+        next.key = [token.id, leaf.key].join('|')
+        out.push(next)
+      })
+    })
+    return out
+  }
+
+  const drillOptionsFor = dimension => {
+    if (isDateDim(dimension)) {
+      return [
+        { id: 'all', name: '(all)' },
+        { id: 'year', name: 'Year' },
+        { id: 'quarter', name: 'Quarter' },
+        { id: 'month', name: 'Month' },
+        { id: 'week', name: 'Week' },
+        { id: 'day', name: 'Day' }
+      ]
+    }
+    return [
+      { id: 'all', name: '(all)' },
+      { id: '1', name: 'Level 1' },
+      { id: '2', name: 'Level 2' },
+      { id: '3', name: 'Level 3' },
+      { id: '4', name: 'Level 4' }
+    ]
+  }
+
   const setupMessage = extra => {
     return `
       <div class="placeholder">
@@ -642,6 +727,38 @@
         font-size: 11px;
         margin-left: 4px;
       }
+      button.drill-btn {
+        border: 0;
+        background: none;
+        color: #0854a0;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        padding: 0 4px;
+      }
+      .drill-menu {
+        position: absolute;
+        min-width: 148px;
+        background: #fff;
+        border: 1px solid #d9d9d9;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+        z-index: 60;
+        padding: 4px 0;
+      }
+      .drill-menu button {
+        display: block;
+        width: 100%;
+        border: 0;
+        background: none;
+        text-align: left;
+        padding: 6px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .drill-menu button:hover,
+      .drill-menu button.active {
+        background: #e8f2fe;
+      }
       tfoot td {
         font-weight: 600;
         background: #f5f6f7;
@@ -707,6 +824,7 @@
       this._editing = false
       this._props = {}
       this._dimFilters = {}
+      this._drillLevels = {}
     }
 
     onCustomWidgetResize () {
@@ -837,9 +955,12 @@
         const seen = new Map()
         data.forEach(row => {
           const cell = row[dimension.key] || {}
-          const id = cell.id || ''
+          const id = cell.id || cell.label || ''
+          if (!id || /^(\(all\)|all)$/i.test(String(id).trim())) {
+            return
+          }
           if (!seen.has(id)) {
-            seen.set(id, cell.label || cell.id || '(all)')
+            seen.set(id, cell.label || cell.id || id)
           }
         })
         return Array.from(seen.keys()).map(id => ({ id, label: seen.get(id) }))
@@ -927,6 +1048,25 @@
         const versionMembers = sortVersionMembers(membersOf(versionDim).filter(item => item.id))
         leafColumns = expandVersionLeafColumns(measures, versionMembers)
       }
+      if (!this._drillLevels) {
+        this._drillLevels = {}
+      }
+      const expandedDims = []
+      const dateAlready = !!(forecastMode && dateDim && leafColumns.some(column => column.date))
+      selectorDims.forEach(dimension => {
+        if (isVersionDim(dimension)) {
+          return
+        }
+        if (dateAlready && dateDim && dimension.key === dateDim.key) {
+          return
+        }
+        const level = this._drillLevels[dimension.key] || 'all'
+        const members = filterMembersByLevel(membersOf(dimension), level)
+        const tokens = members.length ? members : [{ id: '', label: '(all)' }]
+        leafColumns = multiplyLeavesByMembers(leafColumns, dimension.key, tokens, isDateDim(dimension))
+        expandedDims.push(dimension)
+      })
+      stackedDims = stackedDims.filter(dimension => !expandedDims.some(item => item.key === dimension.key) && !isVersionDim(dimension))
       this._dimensions = rowDims.concat(stackedDims)
 
       const headerBg = this.headerBackground || '#0854A0'
@@ -974,35 +1114,43 @@
         return `<th class="${extraClass || 'axis-label'}" colspan="${rowHeaderCount}" style="${cellChrome};text-align:right;${extraStyle || ''}">${label}</th>`
       }
       let table = `<table style="font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor}"><thead>`
-      if (forecastMode && dateDim && leafColumns.some(column => column.date)) {
+      const appendGroupedRow = (dimension, readMember) => {
         table += '<tr class="selector">'
-        table += axisLabel(this._escape(dimName(dateDim)) + '<span class="chev">›</span>', 'axis-label selector')
-        leafColumns.forEach(column => {
-          table += `<td class="selector"><span class="member-link">${this._escape(column.date.label || column.date.id)}</span><span class="chev">›</span></td>`
-        })
-        table += '</tr>'
-        if (versionDim) {
-          table += '<tr class="selector">'
-          table += axisLabel(this._escape(dimName(versionDim)), 'axis-label selector')
-          leafColumns.forEach(column => {
-            table += `<td class="selector"><span class="member-link">${this._escape(column.versionLabel)}</span></td>`
-          })
-          table += '</tr>'
-        }
-      } else if (versionDim && selectorDims.some(isVersionDim) && leafColumns.some(column => column.versionId)) {
-        table += '<tr class="selector">'
-        table += axisLabel(this._escape(dimName(versionDim)), 'axis-label selector')
+        table += axisLabel(
+          this._escape(dimName(dimension)) +
+          '<button type="button" class="chev drill-btn" data-dim="' + this._escape(dimension.key) + '" title="Change hierarchy level">›</button>',
+          'axis-label selector'
+        )
         let index = 0
         while (index < leafColumns.length) {
-          const versionId = leafColumns[index].versionId
+          const token = readMember(leafColumns[index]) || { id: '', label: '(all)' }
           let span = 0
-          while (index + span < leafColumns.length && leafColumns[index + span].versionId === versionId) {
+          while (index + span < leafColumns.length) {
+            const other = readMember(leafColumns[index + span]) || { id: '', label: '(all)' }
+            if (String(other.id) !== String(token.id)) {
+              break
+            }
             span += 1
           }
-          table += `<td class="selector" colspan="${span}"><span class="member-link">${this._escape(leafColumns[index].versionLabel)}</span></td>`
+          table += `<td class="selector" colspan="${span}"><span class="member-link">${this._escape(token.label || token.id || '(all)')}</span></td>`
           index += span
         }
         table += '</tr>'
+      }
+      if (forecastMode && dateDim && leafColumns.some(column => column.date)) {
+        appendGroupedRow(dateDim, column => column.date)
+        if (versionDim) {
+          appendGroupedRow(versionDim, column => ({ id: column.versionId, label: column.versionLabel }))
+        }
+      } else if (versionDim && selectorDims.some(isVersionDim) && leafColumns.some(column => column.versionId)) {
+        expandedDims.filter(dimension => !isVersionDim(dimension)).forEach(dimension => {
+          appendGroupedRow(dimension, column => (column.stack && column.stack[dimension.key]) || null)
+        })
+        appendGroupedRow(versionDim, column => ({ id: column.versionId, label: column.versionLabel }))
+      } else {
+        expandedDims.forEach(dimension => {
+          appendGroupedRow(dimension, column => (column.stack && column.stack[dimension.key]) || (isDateDim(dimension) ? column.date : null))
+        })
       }
       table += '<tr class="axis">'
       table += axisLabel('Measures')
@@ -1013,10 +1161,12 @@
       stackedDims.forEach(dimension => {
         const members = membersOf(dimension)
         const selected = selectedMember(dimension)
-        const showChevron = !isVersionDim(dimension) || members.length > 1
-        const chev = showChevron ? '<span class="chev">›</span>' : ''
         table += '<tr class="selector">'
-        table += axisLabel(`${this._escape(dimName(dimension))}${chev}`, 'axis-label selector')
+        table += axisLabel(
+          this._escape(dimName(dimension)) +
+          '<button type="button" class="chev drill-btn" data-dim="' + this._escape(dimension.key) + '" title="Change hierarchy level">›</button>',
+          'axis-label selector'
+        )
         leafColumns.forEach(() => {
           table += '<td class="selector">'
           table += `<select class="member-link" data-dim="${this._escape(dimension.key)}" aria-label="${this._escape(dimName(dimension))}">`
@@ -1028,7 +1178,7 @@
             const isSel = item.id === selected ? ' selected' : ''
             table += `<option value="${this._escape(item.id)}"${isSel}>${this._escape(item.label || item.id || '(all)')}</option>`
           })
-          table += `</select>${chev}`
+          table += '</select>'
           table += '</td>'
         })
         table += '</tr>'
@@ -1063,6 +1213,19 @@
           if (versionDim && column.versionId) {
             const cell = item[versionDim.key] || {}
             if (cell.id !== column.versionId && cell.label !== column.versionId) {
+              return false
+            }
+          }
+          const stack = column.stack || {}
+          const stackKeys = Object.keys(stack)
+          for (let i = 0; i < stackKeys.length; i++) {
+            const dimKey = stackKeys[i]
+            const want = stack[dimKey]
+            if (!want || !want.id) {
+              continue
+            }
+            const cell = item[dimKey] || {}
+            if (cell.id !== want.id && cell.label !== want.id && cell.label !== want.label) {
               return false
             }
           }
@@ -1103,8 +1266,8 @@
           const measureRule = firstMatchingRule(rules, measureKind)
           const extra = (isChanged ? 'background:' + changedBg + ';' : '') + cellChrome + ';text-align:right'
           if (editable) {
-            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" data-version="${this._escape(column.versionId || '')}" data-date="${this._escape((column.date && column.date.id) || '')}"${unit} style="${ruleStyle(measureRule, extra)}">`
-            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" data-version="${this._escape(column.versionId || '')}" data-date="${this._escape((column.date && column.date.id) || '')}" />`
+            table += `<td class="measure${isChanged ? ' changed' : ''}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" data-version="${this._escape(column.versionId || '')}" data-date="${this._escape((column.date && column.date.id) || '')}" data-stack="${this._escape(JSON.stringify(column.stack || {}))}"${unit} style="${ruleStyle(measureRule, extra)}">`
+            table += `<input class="cell-input" inputmode="decimal" value="${this._escape(display)}" data-row="${rowIndex}" data-measure="${this._escape(column.measure.key)}" data-col="${this._escape(column.key)}" data-version="${this._escape(column.versionId || '')}" data-date="${this._escape((column.date && column.date.id) || '')}" data-stack="${this._escape(JSON.stringify(column.stack || {}))}" />`
             table += '</td>'
           } else {
             table += `<td class="measure"${unit} style="${ruleStyle(measureRule, extra)}">${this._escape(display)}</td>`
@@ -1134,11 +1297,12 @@
         select.addEventListener('change', () => {
           const dimKey = select.getAttribute('data-dim')
           this._dimFilters[dimKey] = select.value
-          const dimension = stackedDims.find(item => item.key === dimKey)
+          const dimension = stackedDims.find(item => item.key === dimKey) || this._dimensions.find(item => item.key === dimKey)
           this._applyDimensionFilter(dimension, select.value)
           this.render()
         })
       })
+      this._bindDrillMenus(selectorDims.concat(rowDims))
 
       this._tableWrap.querySelectorAll('input.cell-input').forEach(input => {
         input.addEventListener('focus', () => {
@@ -1162,6 +1326,101 @@
       })
 
       this._renderToolbar()
+    }
+
+    _getDataSource () {
+      try {
+        const binding = this.dataBindings && this.dataBindings.getDataBinding && this.dataBindings.getDataBinding('dataBinding')
+        return binding && binding.getDataSource && binding.getDataSource()
+      } catch (ignore) {
+        return null
+      }
+    }
+
+    _bindDrillMenus (dimensions) {
+      const host = this._tableWrap
+      host.querySelectorAll('.drill-menu').forEach(menu => menu.remove())
+      host.querySelectorAll('button.drill-btn').forEach(btn => {
+        btn.addEventListener('click', event => {
+          event.preventDefault()
+          event.stopPropagation()
+          const dimKey = btn.getAttribute('data-dim')
+          const dimension = (dimensions || []).find(item => item.key === dimKey)
+          if (!dimension) {
+            return
+          }
+          host.querySelectorAll('.drill-menu').forEach(menu => menu.remove())
+          const menu = document.createElement('div')
+          menu.className = 'drill-menu'
+          const current = (this._drillLevels && this._drillLevels[dimKey]) || 'all'
+          drillOptionsFor(dimension).forEach(option => {
+            const item = document.createElement('button')
+            item.type = 'button'
+            item.textContent = option.name
+            if (option.id === current) {
+              item.className = 'active'
+            }
+            item.addEventListener('click', () => {
+              menu.remove()
+              this._applyHierarchyLevel(dimension, option.id)
+            })
+            menu.appendChild(item)
+          })
+          const rect = btn.getBoundingClientRect()
+          const rootRect = this._root.getBoundingClientRect()
+          menu.style.left = Math.max(8, rect.left - rootRect.left) + 'px'
+          menu.style.top = (rect.bottom - rootRect.top + 4) + 'px'
+          this._root.appendChild(menu)
+          const close = click => {
+            if (!menu.contains(click.target) && click.target !== btn) {
+              menu.remove()
+              this._root.removeEventListener('click', close, true)
+            }
+          }
+          setTimeout(() => this._root.addEventListener('click', close, true), 0)
+        })
+      })
+    }
+
+    async _applyHierarchyLevel (dimension, levelKey) {
+      if (!this._drillLevels) {
+        this._drillLevels = {}
+      }
+      this._drillLevels[dimension.key] = levelKey
+      const ds = this._getDataSource()
+      const dimId = dimension.id || dimension.key
+      const levelNumber = ({ all: 0, year: 1, quarter: 2, month: 3, week: 3, day: 4 })[levelKey]
+      const n = levelNumber != null ? levelNumber : Number(levelKey)
+      const call = async (name, args) => {
+        if (!ds || typeof ds[name] !== 'function') {
+          return false
+        }
+        try {
+          await ds[name].apply(ds, args)
+          return true
+        } catch (ignore) {
+          return false
+        }
+      }
+      if (levelKey === 'all') {
+        await call('removeHierarchy', [dimId])
+        await call('setHierarchyLevel', [dimId, 0])
+        await call('setDrillLevel', [dimId, 0])
+      } else {
+        await call('setHierarchyLevel', [dimId, n])
+        await call('setDrillLevel', [dimId, n])
+        await call('setInitialDrillLevel', [dimId, n])
+        try {
+          const hierarchies = ds && ds.getHierarchies ? await ds.getHierarchies(dimId) : []
+          if (hierarchies && hierarchies.length) {
+            const pick = hierarchies.find(item => /yqm|yhqm|time|parent|date/i.test(JSON.stringify(item))) || hierarchies[0]
+            const hierarchyId = pick.id || pick.hierarchyId || pick.name || pick
+            await call('setHierarchy', [dimId, hierarchyId])
+            await call('setHierarchyLevel', [dimId, n])
+          }
+        } catch (ignore) {}
+      }
+      this.render()
     }
 
     async _applyDimensionFilter (dimension, memberId) {
@@ -1207,6 +1466,24 @@
         if (versionId && versionDim) {
           const cell = item[versionDim.key] || {}
           if (cell.id !== versionId && cell.label !== versionId) {
+            return false
+          }
+        }
+        let stack = {}
+        try {
+          stack = JSON.parse(input.getAttribute('data-stack') || '{}')
+        } catch (ignore) {
+          stack = {}
+        }
+        const stackKeys = Object.keys(stack)
+        for (let i = 0; i < stackKeys.length; i++) {
+          const dimKey = stackKeys[i]
+          const want = stack[dimKey]
+          if (!want || !want.id) {
+            continue
+          }
+          const cell = item[dimKey] || {}
+          if (cell.id !== want.id && cell.label !== want.id && cell.label !== want.label) {
             return false
           }
         }
