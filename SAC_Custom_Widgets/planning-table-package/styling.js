@@ -163,14 +163,14 @@
         color: #0854a0;
       }
       .overlay {
-        position: absolute;
+        position: fixed;
         inset: 0;
-        background: rgba(29, 45, 62, 0.28);
-        z-index: 30;
+        background: rgba(29, 45, 62, 0.32);
+        z-index: 1000;
         display: flex;
         align-items: flex-start;
         justify-content: center;
-        padding: 32px 8px 8px;
+        padding: 80px 16px 16px;
       }
       .warn-dialog {
         width: 100%;
@@ -515,16 +515,24 @@
       const byId = id => this._shadowRoot.getElementById(id)
       byId('tableType').addEventListener('change', () => {
         const next = byId('tableType').value
-        const current = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
+        const current = this._committedTableType()
         if (next === current) {
           this._typeWarnOpen = false
+          this._pendingTableType = ''
+          byId('type-warn').classList.add('hidden')
           this._toggleForecast()
+          this.dispatchEvent(new CustomEvent('propertiesChanged', {
+            detail: { properties: { pendingTableType: '' } }
+          }))
           return
         }
         this._pendingTableType = next
         this._typeWarnOpen = true
         byId('type-warn').classList.remove('hidden')
         this._toggleForecast()
+        this.dispatchEvent(new CustomEvent('propertiesChanged', {
+          detail: { properties: { pendingTableType: next } }
+        }))
       })
       byId('confirm-table-type').addEventListener('click', () => this._confirmTableType())
       byId('cancel-table-type').addEventListener('click', () => this._cancelTableType())
@@ -646,7 +654,7 @@
     }
 
     _toggleForecast () {
-      const isForecast = !this._typeWarnOpen && this._val('tableType') === 'Forecast'
+      const isForecast = !this._typeWarnOpen && this._committedTableType() === 'Forecast'
       this._shadowRoot.getElementById('forecast-panel').classList.toggle('hidden', !isForecast)
     }
 
@@ -657,6 +665,7 @@
     _confirmTableType () {
       const next = this._pendingTableType || this._val('tableType')
       this._typeWarnOpen = false
+      this._pendingTableType = ''
       this._shadowRoot.getElementById('type-warn').classList.add('hidden')
       this._shadowRoot.getElementById('tableType').value = next
       if (next === 'Forecast') {
@@ -675,6 +684,9 @@
       this._shadowRoot.getElementById('type-warn').classList.add('hidden')
       this._shadowRoot.getElementById('tableType').value = this._committedTableType()
       this._toggleForecast()
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { pendingTableType: '' } }
+      }))
     }
 
     _fillMemberSelect (select, items, current) {
@@ -925,8 +937,19 @@
     }
 
     _loadTableType () {
-      const type = this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
-      this._shadowRoot.getElementById('tableType').value = type
+      const pending = String(this.pendingTableType || '')
+      const committed = this._committedTableType()
+      if (pending && pending !== committed) {
+        this._pendingTableType = pending
+        this._typeWarnOpen = true
+        this._shadowRoot.getElementById('tableType').value = pending
+        this._shadowRoot.getElementById('type-warn').classList.remove('hidden')
+      } else {
+        this._pendingTableType = ''
+        this._typeWarnOpen = false
+        this._shadowRoot.getElementById('tableType').value = committed
+        this._shadowRoot.getElementById('type-warn').classList.add('hidden')
+      }
       const setIf = (id, value) => {
         if (value != null && this._shadowRoot.getElementById(id)) {
           this._shadowRoot.getElementById(id).value = String(value)
@@ -967,7 +990,8 @@
             lookAheadAdditional: Number(this._val('lookAheadAdditional') || 0),
             lookAheadAdditionalUnit: this._val('lookAheadAdditionalUnit'),
             sumFor: this._val('sumFor'),
-            additionalVersionsJson: JSON.stringify((this._draftExtra || []).filter(item => item && item.version))
+            additionalVersionsJson: JSON.stringify((this._draftExtra || []).filter(item => item && item.version)),
+            pendingTableType: ''
           }
         }
       }))

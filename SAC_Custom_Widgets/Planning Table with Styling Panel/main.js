@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.9'
+  const WIDGET_VERSION = '1.3.8'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -523,6 +523,7 @@
         box-sizing: border-box;
         background: #fff;
         border: 1px solid #d9d9d9;
+        position: relative;
       }
       .toolbar {
         display: flex;
@@ -678,10 +679,73 @@
       .error {
         color: #aa0808;
       }
+      .type-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(29, 45, 62, 0.32);
+        z-index: 40;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 56px;
+      }
+      .type-overlay.hidden { display: none; }
+      .warn-dialog {
+        width: min(460px, calc(100% - 24px));
+        background: #fff;
+        border: 1px solid #d9d9d9;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+      }
+      .warn-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e5e5;
+        color: #6a6d70;
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .warn-title .bang {
+        color: #e9730c;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .warn-dialog p {
+        margin: 0;
+        padding: 16px;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .warn-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 8px 12px 12px;
+        border-top: 1px solid #e5e5e5;
+      }
+      .warn-actions button {
+        border: 0;
+        background: none;
+        color: #0854a0;
+        font: inherit;
+        cursor: pointer;
+        padding: 8px 10px;
+      }
     </style>
     <div id="root">
       <div id="toolbar" class="toolbar"></div>
       <div id="table-wrap" class="table-wrap"></div>
+      <div id="type-warn" class="type-overlay hidden">
+        <div class="warn-dialog" role="alertdialog" aria-labelledby="type-warn-title">
+          <div class="warn-title" id="type-warn-title"><span class="bang">⚠</span> Warning</div>
+          <p>Changing the table type will clear filters, sort, dimension and measure input controls, styling, and more.</p>
+          <div class="warn-actions">
+            <button type="button" id="confirm-table-type">Change Table Type</button>
+            <button type="button" id="cancel-table-type">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
   `
 
@@ -706,6 +770,8 @@
       this._editing = false
       this._props = {}
       this._dimFilters = {}
+      this._shadowRoot.getElementById('confirm-table-type').addEventListener('click', () => this._confirmPendingTableType())
+      this._shadowRoot.getElementById('cancel-table-type').addEventListener('click', () => this._cancelPendingTableType())
     }
 
     onCustomWidgetResize () {
@@ -726,6 +792,7 @@
       if (!this._editing) {
         this.render()
       }
+      this._syncTypeWarning()
     }
 
     getLastChange () {
@@ -755,6 +822,45 @@
       this.readOnly = !!value
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: { properties: { readOnly: this.readOnly } }
+      }))
+    }
+
+    _committedTableType () {
+      return this.tableType === 'Forecast' ? 'Forecast' : 'Cross-Tab'
+    }
+
+    _syncTypeWarning () {
+      const overlay = this._shadowRoot.getElementById('type-warn')
+      if (!overlay) {
+        return
+      }
+      const pending = String(this.pendingTableType || '')
+      const show = !!pending && pending !== this._committedTableType()
+      overlay.classList.toggle('hidden', !show)
+    }
+
+    _confirmPendingTableType () {
+      const next = String(this.pendingTableType || '')
+      if (!next || next === this._committedTableType()) {
+        this._cancelPendingTableType()
+        return
+      }
+      this._dimFilters = {}
+      const properties = {
+        tableType: next,
+        pendingTableType: ''
+      }
+      if (next === 'Forecast') {
+        properties.timeframeType = 'Rolling Forecast'
+      }
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties }
+      }))
+    }
+
+    _cancelPendingTableType () {
+      this.dispatchEvent(new CustomEvent('propertiesChanged', {
+        detail: { properties: { pendingTableType: '' } }
       }))
     }
 
@@ -788,6 +894,7 @@
         this._tableWrap.innerHTML = `<div class="error">The table could not be rendered. ${this._escape(err && err.message ? err.message : err)}</div>`
         this._renderToolbar()
       }
+      this._syncTypeWarning()
     }
 
     _renderTable (dataBinding) {

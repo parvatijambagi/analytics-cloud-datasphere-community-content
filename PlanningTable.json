@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table.v13",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.3.9",
+  "version": "1.3.8",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table 1.3",
@@ -15,14 +15,14 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table-v13",
       "url": "/main-v13.js",
-      "integrity": "sha256-Ti8iTSX1oDdinyRXLe5Uu1BoOmr4Z1yCwXEATKZYQLc=",
+      "integrity": "sha256-sFqNZc674W5XUKebMswLLxqbtTfkh9e9lE5fOy8YMqw=",
       "ignoreIntegrity": true
     },
     {
       "kind": "styling",
       "tag": "com-sap-sac-sample-planning-table-styling-v13",
       "url": "/styling-v13.js",
-      "integrity": "sha256-Ko3dHR3MuqhWFNP7cT+IdfhfYEvPl9K4JCfCM9u04v0=",
+      "integrity": "sha256-klHigp7Es1rAvlNggN+4mKVnGPraYoWv4XoOKGozuQo=",
       "ignoreIntegrity": true
     }
   ],
@@ -179,6 +179,11 @@
       "type": "string",
       "default": "Cross-Tab",
       "description": "Cross-Tab or Forecast Layout"
+    },
+    "pendingTableType": {
+      "type": "string",
+      "default": "",
+      "description": "Requested table type waiting for the Change Table Type warning"
     },
     "lookBackOn": {
       "type": "string",
