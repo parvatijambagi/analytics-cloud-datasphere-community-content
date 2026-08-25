@@ -1,4 +1,4 @@
-# How to download the Planning Table widget (v1.3.10)
+# How to download the Planning Table widget (v1.3.11)
 
 Do **not** use branch URLs that contain `cursor/stacked-column-headers-abca`.
 GitHub and many browsers treat `cursor` as the branch name and then look for a file
@@ -44,4 +44,4 @@ In SAC go to **Custom Widgets** → **Add** → upload **JSON and ZIP as files f
 Do not paste a GitHub URL into SAC. The JSON uses `/main-v13.js` and `/styling-v13.js`,
 which SAC resolves from the ZIP. Uploading JSON alone causes a **404** for those scripts.
 
-Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.10**.
+Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.11**.

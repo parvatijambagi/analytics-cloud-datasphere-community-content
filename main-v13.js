@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.10'
+  const WIDGET_VERSION = '1.3.11'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -685,6 +685,12 @@
     return out
   }
 
+  const isAllMember = member => {
+    const id = String((member && member.id) || '').trim()
+    const label = String((member && member.label) || '').trim()
+    return !id || /^(\(all\)|all)$/i.test(id) || /^(\(all\)|all)$/i.test(label)
+  }
+
   const sameForecastDate = (cell, columnDate) => {
     if (!columnDate) {
       return true
@@ -1149,9 +1155,6 @@
         this._dimFilters = {}
         this._forecastPrimeStarted = false
         this._forecastDateMembers = []
-        if (!isForecastTableType(changedProps.tableType)) {
-          this._restoreCrossTabQuery()
-        }
       }
       if (changedProps && changedProps.tableType) {
         this._lastTableType = changedProps.tableType
@@ -1553,13 +1556,25 @@
             return false
           }
           if (column.date && dateDim) {
-            if (!sameForecastDate(item[dateDim.key] || {}, column.date)) {
-              return false
+            const cell = item[dateDim.key] || {}
+            if (forecastMode) {
+              if (!sameForecastDate(cell, column.date)) {
+                return false
+              }
+            } else if (!isAllMember(column.date)) {
+              const dateId = cell.id || ''
+              if (dateId !== column.date.id && cell.label !== column.date.id && cell.label !== column.date.label) {
+                return false
+              }
             }
           }
           if (versionDim && column.versionId) {
             const cell = item[versionDim.key] || {}
-            if (!versionMatches(cell, column.versionId) && !versionMatches(cell, column.versionLabel)) {
+            if (forecastMode) {
+              if (!versionMatches(cell, column.versionId) && !versionMatches(cell, column.versionLabel)) {
+                return false
+              }
+            } else if (cell.id !== column.versionId && cell.label !== column.versionId && cell.label !== column.versionLabel) {
               return false
             }
           }
@@ -1568,7 +1583,7 @@
           for (let i = 0; i < stackKeys.length; i++) {
             const dimKey = stackKeys[i]
             const want = stack[dimKey]
-            if (!want || !want.id) {
+            if (!want || !want.id || isAllMember(want)) {
               continue
             }
             const cell = item[dimKey] || {}
@@ -1611,7 +1626,7 @@
         rowDims.forEach(dimension => {
           const cell = row[dimension.key] || {}
           const dimRule = firstMatchingRule(rules, 'dimension')
-          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${this._escape(cell.label || cell.id || '')}</td>`
+          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${this._escape(cell.label || '')}</td>`
         })
         if (!rowDims.length) {
           table += `<td class="dim" style="${cellChrome}"></td>`
@@ -1711,14 +1726,12 @@
       const metadata = binding && binding.metadata
       const dimensions = parseMetadata(metadata).dimensions
       const dateDim = (dimensions || []).find(isDateDim)
-      const versionDim = (dimensions || []).find(isVersionDim)
       if (!dateDim) {
         return
       }
       this._forecastPrimeStarted = true
       const ds = this._getDataSource()
       const dimId = dateDim.id || dateDim.key
-      const versionId = versionDim && (versionDim.id || versionDim.key)
       const finish = members => {
         const list = (members || []).map(item => {
           if (!item) {
@@ -1735,71 +1748,19 @@
         }).filter(Boolean)
         if (list.length) {
           this._forecastDateMembers = list
+          if (!this._editing) {
+            this.render()
+          }
         }
-        if (!this._editing) {
-          this.render()
-        }
-      }
-      const call = async (name, args) => {
-        if (!ds || typeof ds[name] !== 'function') {
-          return
-        }
-        try {
-          await ds[name].apply(ds, args)
-        } catch (ignore) {}
       }
       Promise.resolve().then(async () => {
         try {
-          await call('removeDimensionFilter', [dimId])
-          if (versionId) {
-            await call('removeDimensionFilter', [versionId])
-          }
-          await call('setHierarchyLevel', [dimId, 3])
-          await call('setDrillLevel', [dimId, 3])
-          await call('setInitialDrillLevel', [dimId, 3])
-          if (ds && typeof ds.setUnbookedMembersEnabled === 'function') {
-            try {
-              await ds.setUnbookedMembersEnabled(dimId, true)
-            } catch (ignore) {}
-          }
-          let members = []
           if (ds && typeof ds.getMembers === 'function') {
-            try {
-              members = await ds.getMembers(dimId)
-            } catch (ignore) {
-              members = []
-            }
-            if ((!members || !members.length) && ds.getMembers.length > 1) {
-              try {
-                members = await ds.getMembers(dimId, { limit: 500 })
-              } catch (ignore) {}
-            }
+            finish(await ds.getMembers(dimId))
           }
-          finish(members)
         } catch (ignore) {
           this._forecastPrimeStarted = false
         }
-      })
-    }
-
-    _restoreCrossTabQuery () {
-      const binding = this._resolveDataBinding()
-      const metadata = binding && binding.metadata
-      const dateDim = parseMetadata(metadata).dimensions.find(isDateDim)
-      if (!dateDim) {
-        return
-      }
-      const ds = this._getDataSource()
-      const dimId = dateDim.id || dateDim.key
-      Promise.resolve().then(async () => {
-        try {
-          if (ds && typeof ds.setHierarchyLevel === 'function') {
-            await ds.setHierarchyLevel(dimId, 0)
-          }
-          if (ds && typeof ds.setDrillLevel === 'function') {
-            await ds.setDrillLevel(dimId, 0)
-          }
-        } catch (ignore) {}
       })
     }
 
