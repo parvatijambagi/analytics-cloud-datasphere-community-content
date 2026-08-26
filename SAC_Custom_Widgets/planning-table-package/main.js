@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.26'
+  const WIDGET_VERSION = '1.3.27'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1177,15 +1177,16 @@
       button.node-toggle {
         border: 0;
         background: none;
-        color: #556b82;
+        color: #0854a0;
         cursor: pointer;
         font: inherit;
-        font-size: 10px;
-        padding: 0 3px 0 0;
+        font-weight: 700;
+        font-size: 12px;
+        padding: 0 0 0 4px;
         vertical-align: middle;
       }
       button.node-toggle:hover {
-        color: #0854a0;
+        color: #052c54;
       }
       .drill-menu {
         position: absolute;
@@ -1637,7 +1638,9 @@
         table += '<tr class="selector">'
         table += axisLabel(
           this._escape(dimName(dimension)) +
-          '<button type="button" class="chev drill-btn" data-dim="' + this._escape(dimension.key) + '" title="Change hierarchy level">›</button>',
+          (isDateDim(dimension)
+            ? ''
+            : '<button type="button" class="chev drill-btn" data-dim="' + this._escape(dimension.key) + '" title="Change hierarchy level">›</button>'),
           'axis-label selector'
         )
         let index = 0
@@ -1655,9 +1658,9 @@
           const isAggregate = isAllMember(token) || isAggregateDateMember(token)
           const expanded = canExpand && this._isNodeExpanded(dimension.key, isAggregate ? '(all)' : token.id)
           const toggle = canExpand
-            ? `<button type="button" class="node-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(isAggregate ? '' : (token.id || ''))}" data-aggregate="${isAggregate ? '1' : '0'}" title="${expanded ? 'Collapse' : 'Expand'}">${expanded ? '▾' : '▸'}</button>`
+            ? `<button type="button" class="node-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(isAggregate ? '' : (token.id || ''))}" data-aggregate="${isAggregate ? '1' : '0'}" title="${expanded ? 'Collapse' : 'Drill to next level'}">›</button>`
             : ''
-          table += `<td class="selector" colspan="${span}">${toggle}<span class="member-link">${this._escape(token.label || token.id || '(all)')}</span></td>`
+          table += `<td class="selector" colspan="${span}"><span class="member-link">${this._escape(token.label || token.id || '(all)')}</span>${toggle}</td>`
           index += span
         }
         table += '</tr>'
@@ -1689,7 +1692,9 @@
         table += '<tr class="selector">'
         table += axisLabel(
           this._escape(dimName(dimension)) +
-          '<button type="button" class="chev drill-btn" data-dim="' + this._escape(dimension.key) + '" title="Change hierarchy level">›</button>',
+          (isDateDim(dimension)
+            ? ''
+            : '<button type="button" class="chev drill-btn" data-dim="' + this._escape(dimension.key) + '" title="Change hierarchy level">›</button>'),
           'axis-label selector'
         )
         leafColumns.forEach(() => {
