@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.13'
+  const WIDGET_VERSION = '1.3.14'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1644,7 +1644,10 @@
           return item[measure.key] || item[measure.id] || {}
         }
         let found = matches
-        if (forecastMode && !found.length && column.versionId) {
+        const columnIsYearLevel = forecastMode && column.date && memberHierarchyDepth(column.date) <= 1
+        if (columnIsYearLevel && !found.length && column.versionId) {
+          const wantDate = memberDate(column.date)
+          const wantYear = wantDate ? fiscalYearOf(wantDate) : null
           found = view.filter(item => {
             if (rowKey(item, rowDims) !== rKey) {
               return false
@@ -1655,10 +1658,17 @@
                 return false
               }
             }
+            if (wantYear != null && dateDim) {
+              const dCell = rowCell(item, dateDim)
+              const dDate = memberDate(dCell)
+              if (dDate && fiscalYearOf(dDate) !== wantYear) {
+                return false
+              }
+            }
             return true
           })
         }
-        if (forecastMode && column.date && memberHierarchyDepth(column.date) <= 1 && found.length) {
+        if (columnIsYearLevel && found.length) {
           let sum = 0
           let any = false
           let formatted = ''
