@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.14'
+  const WIDGET_VERSION = '1.3.15'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1800,37 +1800,81 @@
       const metadata = binding && binding.metadata
       const dimensions = parseMetadata(metadata).dimensions
       const dateDim = (dimensions || []).find(isDateDim)
+      const versionDim = (dimensions || []).find(isVersionDim)
       if (!dateDim) {
         return
       }
       this._forecastPrimeStarted = true
       const ds = this._getDataSource()
       const dimId = dateDim.id || dateDim.key
+      const versionId = versionDim && (versionDim.id || versionDim.key)
+      const normalize = members => (members || []).map(item => {
+        if (!item) {
+          return null
+        }
+        if (typeof item === 'string') {
+          return { id: item, label: item }
+        }
+        const id = item.id || item.Id || item.memberId
+        if (!id || /^(\(all\)|all)$/i.test(String(id).trim())) {
+          return null
+        }
+        return { id: String(id), label: String(item.description || item.label || item.name || id) }
+      }).filter(Boolean)
       const finish = members => {
-        const list = (members || []).map(item => {
-          if (!item) {
-            return null
-          }
-          if (typeof item === 'string') {
-            return { id: item, label: item }
-          }
-          const id = item.id || item.Id || item.memberId
-          if (!id || /^(\(all\)|all)$/i.test(String(id).trim())) {
-            return null
-          }
-          return { id: String(id), label: String(item.description || item.label || item.name || id) }
-        }).filter(Boolean)
+        const list = normalize(members)
         if (list.length) {
           this._forecastDateMembers = list
           if (!this._editing) {
             this.render()
           }
         }
+        return list
+      }
+      const setSelection = async (id, memberIds) => {
+        if (!ds || !id || !memberIds || !memberIds.length) {
+          return
+        }
+        try {
+          if (typeof ds.setDimensionFilter === 'function') {
+            await ds.setDimensionFilter(id, memberIds)
+          } else if (typeof ds.setMembers === 'function') {
+            await ds.setMembers(id, memberIds)
+          }
+        } catch (ignore) {}
       }
       Promise.resolve().then(async () => {
         try {
+          let dateList = []
           if (ds && typeof ds.getMembers === 'function') {
-            finish(await ds.getMembers(dimId))
+            dateList = finish(await ds.getMembers(dimId))
+          }
+          if (dateList.length) {
+            await setSelection(dimId, dateList.map(item => item.id))
+          }
+          if (versionId && ds && typeof ds.getMembers === 'function') {
+            const versionList = normalize(await ds.getMembers(versionId))
+            const wanted = [this.lookBackOn, this.lookAheadOn]
+              .concat((() => {
+                try {
+                  const parsed = JSON.parse(this.additionalVersionsJson || '[]')
+                  return Array.isArray(parsed) ? parsed.map(item => (item && typeof item === 'object') ? (item.version || item.id) : item) : []
+                } catch (ignore) {
+                  return []
+                }
+              })())
+              .filter(Boolean)
+            const versionIds = versionList
+              .filter(item => !wanted.length || wanted.some(token => versionMatches(item, token)))
+              .map(item => item.id)
+            if (versionIds.length) {
+              await setSelection(versionId, versionIds)
+            } else if (versionList.length) {
+              await setSelection(versionId, versionList.map(item => item.id))
+            }
+          }
+          if ((dateList.length || versionId) && !this._editing) {
+            this.render()
           }
         } catch (ignore) {
           this._forecastPrimeStarted = false
