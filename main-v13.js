@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.20'
+  const WIDGET_VERSION = '1.3.21'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1871,7 +1871,12 @@
       }
       table += '</table>'
 
-      this._tableWrap.innerHTML = table
+      const forecastDiagnostic = forecastMode && this._forecastCache && this._forecastCache.diagnostic
+      const diagnosticHtml = forecastDiagnostic
+        ? `<div class="forecast-diagnostic" style="margin-top:6px;padding:6px 8px;font-size:11px;color:#556b82;background:#f5f6f7;border:1px dashed #d9d9d9">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
+        : ''
+
+      this._tableWrap.innerHTML = table + diagnosticHtml
       this._tableWrap.querySelectorAll('thead tr.axis th.measure').forEach(cell => {
         cell.style.background = headerBg
         cell.style.color = headerFg
@@ -1971,9 +1976,14 @@
     }
 
     async _listMembers (ds, dimId, parent, keepAll) {
+      const dbg = this._debug()
       if (!ds || typeof ds.getMembers !== 'function') {
+        if (dbg.getMembersAvailable == null) {
+          dbg.getMembersAvailable = false
+        }
         return []
       }
+      dbg.getMembersAvailable = true
       const calls = []
       if (parent == null) {
         calls.push([dimId, 5000])
@@ -1996,16 +2006,27 @@
           const result = await ds.getMembers.apply(ds, calls[i])
           const list = Array.isArray(result) ? result : ((result && result.members) || [])
           list.forEach(item => raw.push(item))
-        } catch (ignore) {}
+        } catch (err) {
+          if (dbg.getMembersErrors == null) {
+            dbg.getMembersErrors = []
+          }
+          if (dbg.getMembersErrors.length < 3) {
+            dbg.getMembersErrors.push(String((err && err.message) || err))
+          }
+        }
       }
       const seen = new Set()
-      return this._normalizeMembers(raw, keepAll).filter(item => {
+      const out = this._normalizeMembers(raw, keepAll).filter(item => {
         if (!item || seen.has(item.id)) {
           return false
         }
         seen.add(item.id)
         return true
       })
+      if (dimId === (this._forecastQuery && this._forecastQuery.dateDim && (this._forecastQuery.dateDim.id || this._forecastQuery.dateDim.key))) {
+        dbg.dateMembersRaw = (dbg.dateMembersRaw || 0) + raw.length
+      }
+      return out
     }
 
     async _walkDateMembers (ds, dateDim) {
@@ -2057,19 +2078,48 @@
       return []
     }
 
+    _debug () {
+      if (!this._forecastDebug) {
+        this._forecastDebug = { getDataCalls: 0, getDataNulls: 0, getDataOk: 0, getDataErrors: [], getDataAvailable: null, sampleSelections: [] }
+      }
+      return this._forecastDebug
+    }
+
     async _readDataCell (ds, selection) {
       if (!ds) {
         return null
       }
+      const dbg = this._debug()
       const invoke = async (name, payload) => {
         if (typeof ds[name] !== 'function') {
+          if (name === 'getData' && dbg.getDataAvailable == null) {
+            dbg.getDataAvailable = false
+          }
           return null
+        }
+        if (name === 'getData') {
+          dbg.getDataAvailable = true
+          dbg.getDataCalls++
+          if (dbg.sampleSelections.length < 3) {
+            dbg.sampleSelections.push(JSON.stringify(payload))
+          }
         }
         try {
           const result = ds[name](payload)
           const value = result && typeof result.then === 'function' ? await result : result
-          return normalizeFetchedCell(value)
-        } catch (ignore) {
+          const normalized = normalizeFetchedCell(value)
+          if (name === 'getData') {
+            if (normalized) {
+              dbg.getDataOk++
+            } else {
+              dbg.getDataNulls++
+            }
+          }
+          return normalized
+        } catch (err) {
+          if (name === 'getData' && dbg.getDataErrors.length < 3) {
+            dbg.getDataErrors.push(String((err && err.message) || err))
+          }
           return null
         }
       }
@@ -2224,7 +2274,9 @@
         return
       }
       this._forecastCache = { key: key, loading: true, ready: false, cells: (cache && cache.cells) || {}, lastBooked: cache && cache.lastBooked, failedAt: 0 }
-      Promise.resolve().then(() => this._loadForecastCells(rowTuples || [], key)).catch(() => {
+      this._forecastDebug = { getDataCalls: 0, getDataNulls: 0, getDataOk: 0, getDataErrors: [], getDataAvailable: null, sampleSelections: [] }
+      Promise.resolve().then(() => this._loadForecastCells(rowTuples || [], key)).catch(err => {
+        this._debug().fatalError = String((err && err.message) || err)
         if (this._forecastCache && this._forecastCache.key === key) {
           this._forecastCache.loading = false
           this._forecastCache.failedAt = Date.now()
@@ -2396,17 +2448,43 @@
         return
       }
       const ready = Object.keys(cells).length > 0
+      const dbg = this._debug()
+      dbg.realMonthMembers = monthMembers.length
+      dbg.probeFoundWorkingDates = !!workingDateIds
       this._forecastCache = {
         key: key,
         loading: false,
         ready: ready,
         cells: cells,
         lastBooked: lastBooked,
-        failedAt: ready ? 0 : Date.now()
+        failedAt: ready ? 0 : Date.now(),
+        diagnostic: ready ? '' : this._buildForecastDiagnostic(dbg)
       }
-      if ((ready || dateMembers.length) && !this._editing) {
+      if (!this._editing) {
         this.render()
       }
+    }
+
+    _buildForecastDiagnostic (dbg) {
+      const parts = []
+      parts.push('real month Date members found via getMembers: ' + (dbg.realMonthMembers || 0))
+      if (dbg.getMembersAvailable === false) {
+        parts.push('ds.getMembers is not available on this DataSource')
+      } else if (dbg.getMembersErrors && dbg.getMembersErrors.length) {
+        parts.push('getMembers error: ' + dbg.getMembersErrors[0])
+      }
+      if (dbg.getDataAvailable === false) {
+        parts.push('ds.getData is not available on this DataSource')
+      } else {
+        parts.push('getData calls: ' + (dbg.getDataCalls || 0) + ' (ok: ' + (dbg.getDataOk || 0) + ', empty: ' + (dbg.getDataNulls || 0) + ')')
+        if (dbg.getDataErrors && dbg.getDataErrors.length) {
+          parts.push('getData error: ' + dbg.getDataErrors[0])
+        }
+      }
+      if (dbg.fatalError) {
+        parts.push('error: ' + dbg.fatalError)
+      }
+      return parts.join(' | ')
     }
 
     _primeForecastDateMembers () {
