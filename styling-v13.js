@@ -74,6 +74,11 @@
         font: inherit;
         padding: 4px 12px;
       }
+      button.apply.applied {
+        background: #107e3e;
+        border-color: #0b5c2d;
+        color: #fff;
+      }
       .tabs {
         display: flex;
         border-bottom: 1px solid #d9d9d9;
@@ -439,6 +444,12 @@
       this._shadowRoot.getElementById('apply-forecast').addEventListener('click', () => {
         this._forecastDirty = false
         this._applyTableType()
+        const applyBtn = this._shadowRoot.getElementById('apply-forecast')
+        applyBtn.classList.add('applied')
+        clearTimeout(this._applyHighlightTimer)
+        this._applyHighlightTimer = setTimeout(() => {
+          applyBtn.classList.remove('applied')
+        }, 2000)
       })
       this._shadowRoot.getElementById('cancel-forecast').addEventListener('click', () => {
         this._forecastDirty = false
@@ -457,6 +468,13 @@
         })
       })
       const byId = id => this._shadowRoot.getElementById(id)
+      const clearApplyHighlight = () => {
+        const applyBtn = this._shadowRoot.getElementById('apply-forecast')
+        if (applyBtn) {
+          applyBtn.classList.remove('applied')
+        }
+        clearTimeout(this._applyHighlightTimer)
+      }
       byId('tableType').addEventListener('change', () => {
         const type = this._val('tableType')
         if (type === 'Cross-Tab') {
@@ -464,6 +482,7 @@
           this._applyTableType()
         } else {
           this._forecastDirty = true
+          clearApplyHighlight()
         }
         this._toggleForecast()
       })
@@ -478,12 +497,14 @@
             this._syncCutOverUi()
           }
           this._forecastDirty = true
+          clearApplyHighlight()
         })
       })
       const step = (id, delta) => {
         const input = byId(id)
         input.value = String(Math.max(0, (Number(input.value) || 0) + delta))
         this._forecastDirty = true
+        clearApplyHighlight()
       }
       byId('lookBackMinus').addEventListener('click', () => step('lookBackAdditional', -1))
       byId('lookBackPlus').addEventListener('click', () => step('lookBackAdditional', 1))

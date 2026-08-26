@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.11'
+  const WIDGET_VERSION = '1.3.12'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -72,6 +72,20 @@
     return [dimension.key, dimension.id, dimension.description, dimension.label]
       .filter(value => value != null && value !== '')
       .map(value => String(value))
+  }
+
+  const rowCell = (row, dimension) => {
+    if (!row || !dimension) {
+      return {}
+    }
+    const keys = identList(dimension)
+    for (let i = 0; i < keys.length; i++) {
+      const cell = row[keys[i]]
+      if (cell && typeof cell === 'object') {
+        return cell
+      }
+    }
+    return {}
   }
 
   const matchDimension = (dimensions, token) => {
@@ -1556,9 +1570,12 @@
             return false
           }
           if (column.date && dateDim) {
-            const cell = item[dateDim.key] || {}
+            const cell = forecastMode ? rowCell(item, dateDim) : (item[dateDim.key] || {})
             if (forecastMode) {
-              if (!sameForecastDate(cell, column.date)) {
+              if (!sameForecastDate(cell, column.date) && !isAllMember(cell)) {
+                return false
+              }
+              if (isAllMember(cell) && column.date && !isAllMember(column.date)) {
                 return false
               }
             } else if (!isAllMember(column.date)) {
@@ -1569,9 +1586,9 @@
             }
           }
           if (versionDim && column.versionId) {
-            const cell = item[versionDim.key] || {}
+            const cell = forecastMode ? rowCell(item, versionDim) : (item[versionDim.key] || {})
             if (forecastMode) {
-              if (!versionMatches(cell, column.versionId) && !versionMatches(cell, column.versionLabel)) {
+              if (!isAllMember(cell) && !versionMatches(cell, column.versionId) && !versionMatches(cell, column.versionLabel)) {
                 return false
               }
             } else if (cell.id !== column.versionId && cell.label !== column.versionId && cell.label !== column.versionLabel) {
@@ -1593,12 +1610,36 @@
           }
           return true
         })
-        const measureOf = item => (item && item[column.measure.key]) || {}
-        if (forecastMode && column.date && memberHierarchyDepth(column.date) <= 1 && matches.length) {
+        const measureOf = item => {
+          if (!item) {
+            return {}
+          }
+          const measure = column.measure
+          if (!forecastMode) {
+            return item[measure.key] || {}
+          }
+          return item[measure.key] || item[measure.id] || {}
+        }
+        let found = matches
+        if (forecastMode && !found.length && column.versionId) {
+          found = view.filter(item => {
+            if (rowKey(item, rowDims) !== rKey) {
+              return false
+            }
+            if (versionDim) {
+              const cell = rowCell(item, versionDim)
+              if (!isAllMember(cell) && !versionMatches(cell, column.versionId) && !versionMatches(cell, column.versionLabel)) {
+                return false
+              }
+            }
+            return true
+          })
+        }
+        if (forecastMode && column.date && memberHierarchyDepth(column.date) <= 1 && found.length) {
           let sum = 0
           let any = false
           let formatted = ''
-          matches.forEach(item => {
+          found.forEach(item => {
             const bound = measureOf(item)
             const numeric = bound.raw != null && bound.raw !== '' ? Number(bound.raw) : NaN
             if (!Number.isNaN(numeric)) {
@@ -1612,8 +1653,8 @@
             return { raw: sum, formatted: formatted }
           }
         }
-        if (matches.length) {
-          return measureOf(matches[0])
+        if (found.length) {
+          return measureOf(found[0])
         }
         if (!column.date && !column.versionId) {
           return row[column.measure.key] || {}
