@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.29'
+  const WIDGET_VERSION = '1.3.30'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1922,7 +1922,7 @@
         ? `<div class="forecast-diagnostic" style="position:sticky;top:0;z-index:5;margin-bottom:6px;padding:6px 8px;font-size:11px;color:#8a3b00;background:#fff4e5;border:1px solid #f0b429">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
         : ''
       const hierarchyHtml = this._hierarchyDiagnostic
-        ? `<div class="hierarchy-diagnostic" style="position:sticky;top:0;z-index:5;margin-bottom:6px;padding:6px 8px;font-size:11px;color:#0b5c2d;background:#e9f7ef;border:1px solid #6fcf97">Drill diagnostic: ${this._escape(this._hierarchyDiagnostic)}</div>`
+        ? `<div class="hierarchy-diagnostic" style="margin-bottom:6px;padding:6px 8px;font-size:11px;font-weight:600;color:#0b5c2d;background:#e9f7ef;border:2px solid #6fcf97">Drill diagnostic: ${this._escape(this._hierarchyDiagnostic)}</div>`
         : ''
 
       this._tableWrap.innerHTML = hierarchyHtml + diagnosticHtml + table
@@ -1940,8 +1940,9 @@
           this.render()
         })
       })
-      this._bindDrillMenus(selectorDims.concat(rowDims))
-      this._bindNodeToggles(selectorDims.concat(rowDims))
+      const allKnownDims = uniqueDims(dimensions.concat(selectorDims).concat(rowDims).concat(dateDim ? [dateDim] : []).concat(versionDim ? [versionDim] : []))
+      this._bindDrillMenus(allKnownDims)
+      this._bindNodeToggles(allKnownDims)
 
       this._tableWrap.querySelectorAll('input.cell-input').forEach(input => {
         input.addEventListener('focus', () => {
@@ -2718,6 +2719,9 @@
           const dimKey = btn.getAttribute('data-dim')
           const dimension = (dimensions || []).find(item => item.key === dimKey)
           if (!dimension) {
+            try { console.warn('[PlanningTable] node-toggle clicked but dimension not found for key', dimKey) } catch (ignore) {}
+            this._hierarchyDiagnostic = 'could not resolve dimension "' + dimKey + '" for this toggle (internal lookup bug)'
+            this.render()
             return
           }
           const isAggregate = btn.getAttribute('data-aggregate') === '1'
@@ -2730,6 +2734,7 @@
     async _toggleHierarchyNode (dimension, memberId, isAggregate) {
       const dimId = dimension.id || dimension.key
       const key = memberId || '(all)'
+      try { console.log('[PlanningTable] toggle', dimId, memberId, isAggregate) } catch (ignore) {}
       if (!this._expandedNodes) {
         this._expandedNodes = {}
       }
