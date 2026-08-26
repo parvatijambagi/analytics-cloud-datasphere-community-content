@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.25'
+  const WIDGET_VERSION = '1.3.26'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1174,6 +1174,19 @@
         font-weight: 700;
         padding: 0 4px;
       }
+      button.node-toggle {
+        border: 0;
+        background: none;
+        color: #556b82;
+        cursor: pointer;
+        font: inherit;
+        font-size: 10px;
+        padding: 0 3px 0 0;
+        vertical-align: middle;
+      }
+      button.node-toggle:hover {
+        color: #0854a0;
+      }
       .drill-menu {
         position: absolute;
         min-width: 148px;
@@ -1265,6 +1278,7 @@
       this._drillLevels = {}
       this._forecastCache = null
       this._chosenTableType = ''
+      this._expandedNodes = {}
     }
 
     onCustomWidgetResize () {
@@ -1637,7 +1651,13 @@
             }
             span += 1
           }
-          table += `<td class="selector" colspan="${span}"><span class="member-link">${this._escape(token.label || token.id || '(all)')}</span></td>`
+          const canExpand = isDateDim(dimension) && memberHierarchyDepth(token) < 3
+          const isAggregate = isAllMember(token) || isAggregateDateMember(token)
+          const expanded = canExpand && this._isNodeExpanded(dimension.key, isAggregate ? '(all)' : token.id)
+          const toggle = canExpand
+            ? `<button type="button" class="node-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(isAggregate ? '' : (token.id || ''))}" data-aggregate="${isAggregate ? '1' : '0'}" title="${expanded ? 'Collapse' : 'Expand'}">${expanded ? '▾' : '▸'}</button>`
+            : ''
+          table += `<td class="selector" colspan="${span}">${toggle}<span class="member-link">${this._escape(token.label || token.id || '(all)')}</span></td>`
           index += span
         }
         table += '</tr>'
@@ -1899,6 +1919,7 @@
         })
       })
       this._bindDrillMenus(selectorDims.concat(rowDims))
+      this._bindNodeToggles(selectorDims.concat(rowDims))
 
       this._tableWrap.querySelectorAll('input.cell-input').forEach(input => {
         input.addEventListener('focus', () => {
@@ -2659,6 +2680,65 @@
         return
       }
       this._applyHierarchyLevel(dateDim, 'all')
+    }
+
+    _isNodeExpanded (dimKey, memberId) {
+      const set = this._expandedNodes && this._expandedNodes[dimKey]
+      return !!(set && set.has(memberId || '(all)'))
+    }
+
+    _bindNodeToggles (dimensions) {
+      const host = this._tableWrap
+      host.querySelectorAll('button.node-toggle').forEach(btn => {
+        btn.addEventListener('click', event => {
+          event.preventDefault()
+          event.stopPropagation()
+          const dimKey = btn.getAttribute('data-dim')
+          const dimension = (dimensions || []).find(item => item.key === dimKey)
+          if (!dimension) {
+            return
+          }
+          const isAggregate = btn.getAttribute('data-aggregate') === '1'
+          const memberId = isAggregate ? '' : btn.getAttribute('data-member')
+          this._toggleHierarchyNode(dimension, memberId, isAggregate)
+        })
+      })
+    }
+
+    async _toggleHierarchyNode (dimension, memberId, isAggregate) {
+      const dimId = dimension.id || dimension.key
+      const key = memberId || '(all)'
+      if (!this._expandedNodes) {
+        this._expandedNodes = {}
+      }
+      if (!this._expandedNodes[dimension.key]) {
+        this._expandedNodes[dimension.key] = new Set()
+      }
+      const set = this._expandedNodes[dimension.key]
+      const isOpen = set.has(key)
+      const ds = this._getDataSource()
+      try {
+        if (isOpen) {
+          if (ds && typeof ds.collapseNode === 'function' && !isAggregate) {
+            await ds.collapseNode(dimId, { [dimId]: memberId })
+          }
+          set.delete(key)
+        } else if (isAggregate) {
+          // Expanding "(all)" reveals the first drill level (Year); reuse the
+          // existing dimension-wide hierarchy level call for the root node.
+          await this._applyHierarchyLevel(dimension, 'year')
+          set.add(key)
+          return
+        } else if (ds && typeof ds.expandNode === 'function') {
+          await ds.expandNode(dimId, { [dimId]: memberId })
+          set.add(key)
+        } else {
+          set.add(key)
+        }
+      } catch (ignore) {
+        set.add(key)
+      }
+      this.render()
     }
 
     async _applyDimensionFilter (dimension, memberId) {
