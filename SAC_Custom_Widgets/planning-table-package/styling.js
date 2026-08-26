@@ -442,6 +442,8 @@
       })
       this._shadowRoot.getElementById('apply').addEventListener('click', () => this._apply())
       this._shadowRoot.getElementById('apply-forecast').addEventListener('click', () => {
+        this._appliedTableType = this._val('tableType') || 'Forecast'
+        this._uiTableType = this._appliedTableType
         this._forecastDirty = false
         this._applyTableType()
         const applyBtn = this._shadowRoot.getElementById('apply-forecast')
@@ -453,11 +455,13 @@
       })
       this._shadowRoot.getElementById('cancel-forecast').addEventListener('click', () => {
         this._forecastDirty = false
+        this._uiTableType = this._appliedTableType || this.tableType || 'Cross-Tab'
         this._loadTableType()
       })
       this._draftExtra = []
       this._forecastDirty = false
       this._uiTableType = null
+      this._appliedTableType = null
       this._versions = [{ id: 'Actual', name: 'Actual' }, { id: 'EPMplusA', name: 'EPMplusA' }, { id: 'Budget', name: 'Budget' }, { id: 'Forecast', name: 'Forecast' }]
       this._dates = [{ id: 'Today', name: 'Today' }, { id: 'Current Period', name: 'Current Period' }]
       this._shadowRoot.querySelectorAll('.tab').forEach(tab => {
@@ -478,17 +482,14 @@
       }
       byId('tableType').addEventListener('change', () => {
         const type = this._val('tableType')
-        this._uiTableType = type
-        this.tableType = type
-        this.dispatchEvent(new CustomEvent('propertiesChanged', {
-          detail: { properties: { tableType: type } }
-        }))
         if (type === 'Cross-Tab') {
           this._forecastDirty = false
+          this._appliedTableType = 'Cross-Tab'
+          this._uiTableType = 'Cross-Tab'
           this._applyTableType()
         } else {
           this._forecastDirty = true
-          clearApplyHighlight()
+          this._uiTableType = 'Forecast'
         }
         this._toggleForecast()
       })
@@ -852,20 +853,26 @@
     }
 
     _resolvedUiTableType () {
-      const raw = this._uiTableType || this.tableType || this._val('tableType') || 'Cross-Tab'
+      const raw = this._appliedTableType || this._uiTableType || this.tableType || 'Cross-Tab'
       return /forecast/i.test(String(raw)) && !/cross[- ]?tab/i.test(String(raw)) ? 'Forecast' : 'Cross-Tab'
     }
 
     _loadTableType () {
-      const type = this._resolvedUiTableType()
       const select = this._shadowRoot.getElementById('tableType')
+      if (this._forecastDirty) {
+        if (select) {
+          select.value = 'Forecast'
+        }
+        this._toggleForecast()
+        return
+      }
+      const type = this._resolvedUiTableType()
       if (select) {
         select.value = type
       }
       this._uiTableType = type
-      if (this._forecastDirty && type === 'Forecast') {
-        this._toggleForecast()
-        return
+      if (!this._appliedTableType) {
+        this._appliedTableType = type
       }
       const setIf = (id, value) => {
         if (value != null && this._shadowRoot.getElementById(id)) {
@@ -894,7 +901,7 @@
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: {
           properties: {
-            tableType: this._uiTableType || this._val('tableType'),
+            tableType: this._appliedTableType || this._val('tableType'),
             lookBackOn: this._val('lookBackOn'),
             lookAheadOn: this._val('lookAheadOn'),
             cutOverMode: mode,
@@ -1047,9 +1054,13 @@
             const incoming = /forecast/i.test(String(changedProps.tableType)) && !/cross[- ]?tab/i.test(String(changedProps.tableType))
               ? 'Forecast'
               : 'Cross-Tab'
-            if (this._uiTableType === 'Forecast' && incoming === 'Cross-Tab' && this._val('tableType') === 'Forecast') {
+            if (this._forecastDirty) {
               return
             }
+            if (this._appliedTableType === 'Forecast' && incoming === 'Cross-Tab') {
+              return
+            }
+            this._appliedTableType = incoming
             this._uiTableType = incoming
             this.tableType = incoming
             return
@@ -1065,7 +1076,7 @@
         this._loadModelCatalog()
         const select = this._shadowRoot.getElementById('tableType')
         if (select) {
-          select.value = this._resolvedUiTableType()
+          select.value = this._forecastDirty ? 'Forecast' : this._resolvedUiTableType()
         }
         this._toggleForecast()
         return
