@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.22'
+  const WIDGET_VERSION = '1.3.23'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1824,6 +1824,7 @@
         return {}
       }
 
+      let forecastFilledCount = 0
       rowTuples.forEach((row, rowIndex) => {
         table += '<tr>'
         rowDims.forEach(dimension => {
@@ -1837,6 +1838,9 @@
         leafColumns.forEach((column, columnIndex) => {
           const bound = findBound(row, column)
           const original = (bound.raw != null && bound.raw !== '') ? bound.raw : bound.formatted
+          if (forecastMode && original != null && original !== '') {
+            forecastFilledCount++
+          }
           const key = changeKey(row, rowDims, column.measure.key) + '||' + column.key
           const pending = this._pending.get(key)
           const current = pending ? pending.value : original
@@ -1871,7 +1875,10 @@
       }
       table += '</table>'
 
-      const forecastDiagnostic = forecastMode && this._forecastCache && this._forecastCache.diagnostic
+      const cache = this._forecastCache
+      const forecastDiagnostic = forecastMode && cache && !cache.loading && forecastFilledCount === 0
+        ? (cache.diagnostic || this._buildForecastDiagnostic(this._debug()))
+        : ''
       const diagnosticHtml = forecastDiagnostic
         ? `<div class="forecast-diagnostic" style="position:sticky;top:0;z-index:5;margin-bottom:6px;padding:6px 8px;font-size:11px;color:#8a3b00;background:#fff4e5;border:1px solid #f0b429">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
         : ''
@@ -2401,7 +2408,7 @@
             if (other) {
               const otherId = mapped[other.fy + '-' + other.period]
               const otherCell = await this._fetchForecastValue(ds, dateDim, versionDim, probeMeasure, probeRow, rowDims, otherId, lookBackId, this._forecastSelectionShape || shape)
-              if (otherCell && !valuesDiffer(cell, otherCell)) {
+              if (!valuesDiffer(cell, otherCell)) {
                 continue
               }
             }
