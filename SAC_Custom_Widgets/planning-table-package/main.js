@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.30'
+  const WIDGET_VERSION = '1.3.31'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -250,6 +250,10 @@
     const yearFirst = text.match(/(20\d{2}|19\d{2})\D*P\s*(0?[1-9]|1[0-2])/i)
     if (yearFirst) {
       return fiscalPeriodStart(yearFirst[1], yearFirst[2])
+    }
+    const quarterFirst = text.match(/Q\s*([1-4])\D+(20\d{2}|19\d{2})/i)
+    if (quarterFirst) {
+      return fiscalPeriodStart(quarterFirst[2], (Number(quarterFirst[1]) - 1) * 3 + 1)
     }
     const yq = text.match(/(\d{4})\D*Q(\d)/i)
     if (yq) {
@@ -840,6 +844,71 @@
     return fiscalYearOf(a) === fiscalYearOf(b) && fiscalPeriodOf(a) === fiscalPeriodOf(b)
   }
 
+  const dateAncestorKey = (member, allMembers) => {
+    const depth = memberHierarchyDepth(member)
+    if (depth <= 0) {
+      return null
+    }
+    const date = memberDate(member)
+    if (!date) {
+      return null
+    }
+    const fy = fiscalYearOf(date)
+    if (depth === 1) {
+      return '(all)'
+    }
+    if (depth === 2) {
+      const match = (allMembers || []).find(item => {
+        if (memberHierarchyDepth(item) !== 1) {
+          return false
+        }
+        const d = memberDate(item)
+        return d && fiscalYearOf(d) === fy
+      })
+      return match ? String(match.id || match.label) : String(fy)
+    }
+    const quarter = Math.ceil(fiscalPeriodOf(date) / 3)
+    const match = (allMembers || []).find(item => {
+      if (memberHierarchyDepth(item) !== 2) {
+        return false
+      }
+      const d = memberDate(item)
+      return d && fiscalYearOf(d) === fy && Math.ceil(fiscalPeriodOf(d) / 3) === quarter
+    })
+    return match ? String(match.id || match.label) : (fy + '-Q' + quarter)
+  }
+
+  const filterDateMembersForDisplay = (members, expandedSet) => {
+    const list = (members || []).filter(item => item && (item.id || item.label))
+    if (!list.length) {
+      return list
+    }
+    const isExpanded = key => !!(expandedSet && expandedSet.has(key))
+    const hasRoot = list.some(item => memberHierarchyDepth(item) === 0)
+    const visible = list.filter(member => {
+      const depth = memberHierarchyDepth(member)
+      const ownKey = depth === 0 ? '(all)' : String(member.id || member.label)
+      if (isExpanded(ownKey)) {
+        // Replaced on screen by its own children.
+        return false
+      }
+      if (depth === 0) {
+        return true
+      }
+      const parentKey = dateAncestorKey(member, list) || '(all)'
+      return isExpanded(parentKey)
+    })
+    if (visible.length) {
+      return visible
+    }
+    if (hasRoot) {
+      return list.filter(item => memberHierarchyDepth(item) === 0)
+    }
+    const depths = list.map(item => memberHierarchyDepth(item)).filter(d => d >= 0)
+    const minDepth = depths.length ? Math.min.apply(null, depths) : 0
+    return list.filter(item => memberHierarchyDepth(item) === minDepth)
+  }
+
   const drillOptionsFor = dimension => {
     if (isDateDim(dimension)) {
       return [
@@ -1190,6 +1259,10 @@
       }
       button.node-toggle.row-toggle {
         padding: 0 4px 0 0;
+      }
+      span.row-toggle-spacer {
+        display: inline-block;
+        width: 15px;
       }
       .drill-menu {
         position: absolute;
@@ -1583,7 +1656,16 @@
             return
           }
           const level = this._drillLevels[dimension.key] || 'all'
-          const members = filterMembersByLevel(membersOf(dimension), level)
+          let members = filterMembersByLevel(membersOf(dimension), level)
+          if (isDateDim(dimension)) {
+            if (!this._expandedNodes) {
+              this._expandedNodes = {}
+            }
+            if (!this._expandedNodes[dimension.key]) {
+              this._expandedNodes[dimension.key] = new Set()
+            }
+            members = filterDateMembersForDisplay(members, this._expandedNodes[dimension.key])
+          }
           const tokens = members.length ? members : [{ id: '', label: '(all)' }]
           leafColumns = multiplyLeavesByMembers(leafColumns, dimension.key, tokens, isDateDim(dimension))
           expandedDims.push(dimension)
@@ -1622,14 +1704,63 @@
       const cellChrome = `border:${lineWidth}px ${lineStyle} ${lineColor};padding:6px ${padR}px 6px ${padL}px;vertical-align:${vAlign};font-family:${fontFamily};font-size:${fontSizePx}px;color:${fontColor};font-weight:${fontWeight};font-style:${fontItalic};text-decoration:${textDecor}`
 
       const seenRows = new Set()
-      const rowTuples = []
+      const allRowTuples = []
       view.forEach(row => {
         const key = rowKey(row, rowDims)
         if (!seenRows.has(key)) {
           seenRows.add(key)
-          rowTuples.push(row)
+          allRowTuples.push(row)
         }
       })
+
+      const rowTreeDims = rowDims.filter(dim => allRowTuples.some(row => {
+        const cell = rowCell(row, dim)
+        return cell && cell.parentId != null && cell.parentId !== ''
+      }))
+      if (!this._expandedNodes) {
+        this._expandedNodes = {}
+      }
+      const hasChildRows = (dim, memberId) => allRowTuples.some(row => {
+        const cell = rowCell(row, dim)
+        return cell && String(cell.parentId || '') === String(memberId)
+      })
+      const rowTuples = rowTreeDims.length
+        ? allRowTuples.filter(row => rowTreeDims.every(dim => {
+          const cell = rowCell(row, dim)
+          const parentId = cell && cell.parentId
+          if (!parentId) {
+            return true
+          }
+          const set = this._expandedNodes[dim.key]
+          return !!(set && set.has(String(parentId)))
+        }))
+        : allRowTuples
+
+      const rowDepthCache = new Map()
+      const computeRowDepth = (dim, id) => {
+        const cacheKey = dim.key + '|' + id
+        if (rowDepthCache.has(cacheKey)) {
+          return rowDepthCache.get(cacheKey)
+        }
+        let depth = 0
+        let current = id
+        const seen = new Set()
+        while (current && !seen.has(current)) {
+          seen.add(current)
+          const found = allRowTuples.find(r => {
+            const c = rowCell(r, dim)
+            return c && String(c.id) === String(current)
+          })
+          const parentId = found && rowCell(found, dim).parentId
+          if (!parentId) {
+            break
+          }
+          depth++
+          current = String(parentId)
+        }
+        rowDepthCache.set(cacheKey, depth)
+        return depth
+      }
 
       const totals = leafColumns.map(() => 0)
       const rowHeaderCount = Math.max(rowDims.length, 1)
@@ -1658,9 +1789,9 @@
             span += 1
           }
           const isAggregate = isAllMember(token) || isAggregateDateMember(token)
-          const hasChildrenHint = token.isNode != null ? !!token.isNode : (token.hasChildren != null ? !!token.hasChildren : null)
+          const hasChildrenHint = token.isNode != null ? !!token.isNode : (token.hasChildren != null ? !!token.hasChildren : false)
           const canExpand = !isVersionDim(dimension) && (
-            isDateDim(dimension) ? (isAggregate || memberHierarchyDepth(token) < 3) : (hasChildrenHint == null ? true : hasChildrenHint)
+            isDateDim(dimension) ? (isAggregate || memberHierarchyDepth(token) < 3) : hasChildrenHint
           )
           const expanded = canExpand && this._isNodeExpanded(dimension.key, isAggregate ? '(all)' : token.id)
           const toggle = canExpand
@@ -1861,15 +1992,21 @@
         rowDims.forEach(dimension => {
           const cell = row[dimension.key] || {}
           const dimRule = firstMatchingRule(rules, 'dimension')
-          const depth = Number(cell.level || cell.hierarchyLevel || 0) || 0
-          const indentStyle = depth > 0 ? `padding-left:${padL + depth * 14}px;` : ''
-          const hasChildrenHint = cell.isNode != null ? !!cell.isNode : (cell.hasChildren != null ? !!cell.hasChildren : true)
+          const isTreeDim = rowTreeDims.some(item => item.key === dimension.key)
+          const depth = cell.level != null || cell.hierarchyLevel != null
+            ? (Number(cell.level || cell.hierarchyLevel || 0) || 0)
+            : (isTreeDim ? computeRowDepth(dimension, cell.id) : 0)
+          const indentStyle = depth > 0 ? `padding-left:${padL + depth * 16}px;` : ''
+          const hasChildrenHint = isTreeDim
+            ? hasChildRows(dimension, cell.id)
+            : (cell.isNode != null ? !!cell.isNode : (cell.hasChildren != null ? !!cell.hasChildren : false))
           const canExpandRow = !!cell.id && !isAllMember(cell) && hasChildrenHint
           const expandedRow = canExpandRow && this._isNodeExpanded(dimension.key, cell.id)
           const rowToggle = canExpandRow
             ? `<button type="button" class="node-toggle row-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(cell.id)}" data-aggregate="0" title="${expandedRow ? 'Collapse' : 'Drill to next level'}">›</button>`
-            : ''
-          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign + ';' + indentStyle)}">${rowToggle}${this._escape(cell.label || '')}</td>`
+            : (isTreeDim && depth > 0 ? '<span class="row-toggle-spacer"></span>' : '')
+          const weight = isTreeDim && depth === 0 ? 'font-weight:700;' : ''
+          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign + ';' + indentStyle + weight)}">${rowToggle}${this._escape(cell.label || '')}</td>`
         })
         if (!rowDims.length) {
           table += `<td class="dim" style="${cellChrome}"></td>`
@@ -2764,32 +2901,27 @@
           return false
         }
       }
-      let succeeded = false
+      // The local expand/collapse state below is what actually drives the
+      // display now: when the dimension's members (with parent levels
+      // included) are already present in the bound data, no API call is
+      // needed at all -- we just show/hide the rows or columns we already
+      // have. expandNode/collapseNode are still attempted best-effort in
+      // case this environment ever adds real support, but their result no
+      // longer blocks the visible expand/collapse.
       if (isOpen) {
-        if (!isAggregate) {
-          succeeded = await tryCall('collapseNode', { [dimId]: memberId })
-        } else {
-          succeeded = true
-        }
         set.delete(key)
-      } else if (isAggregate) {
-        const rootCandidates = [{ [dimId]: '#' }, { [dimId]: '(all)' }, {}]
-        for (let i = 0; i < rootCandidates.length && !succeeded; i++) {
-          succeeded = await tryCall('expandNode', rootCandidates[i])
+        if (!isAggregate) {
+          tryCall('collapseNode', { [dimId]: memberId })
         }
-        if (!succeeded) {
-          await this._applyHierarchyLevel(dimension, 'year')
-        }
-        set.add(key)
       } else {
-        succeeded = await tryCall('expandNode', { [dimId]: memberId })
         set.add(key)
+        if (isAggregate) {
+          tryCall('expandNode', { [dimId]: '#' })
+        } else {
+          tryCall('expandNode', { [dimId]: memberId })
+        }
       }
-      dbg.lastAction = (isOpen ? 'collapse ' : 'expand ') + dimId + '=' + (memberId || '(all)')
-      dbg.lastSucceeded = succeeded
-      this._hierarchyDiagnostic = dbg.expandNodeAvailable === false
-        ? 'ds.expandNode is not available on this DataSource'
-        : (dbg.lastAction + ' -> ' + (succeeded ? 'call completed' : 'call failed/no-op') + (dbg.lastError ? (' | error: ' + dbg.lastError) : ''))
+      this._hierarchyDiagnostic = ''
       this.render()
     }
 

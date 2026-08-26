@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate forecast helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType, isTableTypeEcho, versionMatches, sameForecastDate, isAggregateDateMember, forecastDateCandidates, forecastPeriodKey }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType, isTableTypeEcho, versionMatches, sameForecastDate, isAggregateDateMember, forecastDateCandidates, forecastPeriodKey, dateAncestorKey, filterDateMembersForDisplay, memberHierarchyDepth }\n')()
 
 const p01 = api.parseLooseDate('P01 (2026)')
 if (!p01 || p01.getFullYear() !== 2025 || p01.getMonth() !== 9) {
@@ -198,6 +198,46 @@ if (api.isTableTypeEcho({ tableType: 'Cross-Tab' }, 'Forecast')) {
 }
 if (api.isTableTypeEcho({ tableType: 'Forecast', dataBinding: {} }, 'Cross-Tab')) {
   throw new Error('Applying Forecast must not be treated as an echo')
+}
+
+const hierMembers = [
+  { id: '(all)', label: '(all)' },
+  { id: '2025', label: '2025' },
+  { id: '2026', label: '2026' },
+  { id: 'Q1 (2026)', label: 'Q1 (2026)' },
+  { id: 'Q2 (2026)', label: 'Q2 (2026)' },
+  { id: 'P01 (2026)', label: 'P01 (2026)' },
+  { id: 'P02 (2026)', label: 'P02 (2026)' },
+  { id: 'P04 (2026)', label: 'P04 (2026)' }
+]
+if (api.memberHierarchyDepth({ id: 'Q1 (2026)', label: 'Q1 (2026)' }) !== 2) {
+  throw new Error('Q1 (2026) should be a quarter-depth member')
+}
+if (api.dateAncestorKey({ id: 'P01 (2026)', label: 'P01 (2026)' }, hierMembers) !== 'Q1 (2026)') {
+  throw new Error('P01 (2026) should resolve its parent to the real Q1 (2026) member')
+}
+if (api.dateAncestorKey({ id: 'Q1 (2026)', label: 'Q1 (2026)' }, hierMembers) !== '2026') {
+  throw new Error('Q1 (2026) should resolve its parent to the real 2026 member')
+}
+if (api.dateAncestorKey({ id: '2026', label: '2026' }, hierMembers) !== '(all)') {
+  throw new Error('A year member should resolve its parent to (all)')
+}
+
+const collapsedView = api.filterDateMembersForDisplay(hierMembers, new Set())
+if (collapsedView.length !== 1 || collapsedView[0].id !== '(all)') {
+  throw new Error('With nothing expanded, only (all) should be visible, got ' + JSON.stringify(collapsedView))
+}
+const yearsExpanded = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)']))
+if (yearsExpanded.map(m => m.id).sort().join(',') !== '2025,2026') {
+  throw new Error('Expanding (all) should reveal only the year members, got ' + yearsExpanded.map(m => m.id).join(','))
+}
+const quartersExpanded = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)', '2026']))
+if (quartersExpanded.map(m => m.id).sort().join(',') !== '2025,Q1 (2026),Q2 (2026)') {
+  throw new Error('Expanding 2026 should reveal its quarters alongside the still-collapsed 2025, got ' + quartersExpanded.map(m => m.id).join(','))
+}
+const periodsExpanded = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)', '2026', 'Q1 (2026)']))
+if (periodsExpanded.map(m => m.id).sort().join(',') !== '2025,P01 (2026),P02 (2026),Q2 (2026)') {
+  throw new Error('Expanding Q1 (2026) should reveal its periods while Q2 stays collapsed, got ' + periodsExpanded.map(m => m.id).join(','))
 }
 
 console.log('forecast layout tests passed')
