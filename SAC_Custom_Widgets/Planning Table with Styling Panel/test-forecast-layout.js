@@ -1,12 +1,12 @@
 const fs = require('fs')
 const path = require('path')
 const src = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
-const start = src.indexOf('  const FISCAL_START_MONTH')
+const start = src.indexOf('  const identList = dimension => {')
 const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate forecast helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType, versionMatches, sameForecastDate }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType, versionMatches, sameForecastDate, isAggregateDateMember, forecastDateCandidates, forecastPeriodKey }\n')()
 
 const p01 = api.parseLooseDate('P01 (2026)')
 if (!p01 || p01.getFullYear() !== 2025 || p01.getMonth() !== 9) {
@@ -135,6 +135,56 @@ if (!api.versionMatches({ id: '[Version].[public.Actual]', label: 'Actual' }, 'A
 }
 if (!api.sameForecastDate({ id: '[Date].&[202510]', label: 'Oct 2025' }, { id: 'P01 (2026)', label: 'P01 (2026)' })) {
   throw new Error('Oct 2025 actuals should land in P01 (2026)')
+}
+if (api.sameForecastDate({ id: '2026', label: '2026' }, { id: 'P01 (2026)', label: 'P01 (2026)' })) {
+  throw new Error('Year aggregate 2026 must not fill P01')
+}
+if (api.sameForecastDate({ id: '(all)', label: '(all)' }, { id: 'P01 (2026)', label: 'P01 (2026)' })) {
+  throw new Error('(all) must not fill a month column')
+}
+
+const yearOnlyRows = [
+  { date: { id: '2026', label: '2026' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: -18827401.19 } }
+]
+if (api.lastBookedActualDate(yearOnlyRows, dateDim, versionDim, 'Actual')) {
+  throw new Error('Year-level Actual must not be treated as a booked month')
+}
+const todayFallback = api.resolveCutOver('LastBooked', {
+  mode: 'LastBooked',
+  data: yearOnlyRows,
+  dateDim,
+  versionDim,
+  actualToken: 'Actual'
+})
+const now = new Date()
+if (todayFallback.getFullYear() !== now.getFullYear() || todayFallback.getMonth() !== now.getMonth()) {
+  throw new Error('Last booked with only year data should fall back to today')
+}
+const todayCut = new Date(2026, 7, 26)
+if (!api.isForecastLookBack({ id: 'P11 (2026)', label: 'P11 (2026)' }, todayCut)) {
+  throw new Error('With current period Aug 2026, P11 must stay Actual')
+}
+if (api.isForecastLookBack({ id: 'P12 (2026)', label: 'P12 (2026)' }, todayCut)) {
+  throw new Error('With current period Aug 2026, P12 must be FC')
+}
+if (!api.isAggregateDateMember({ id: '2026', label: '2026' }) || api.isAggregateDateMember({ id: 'P11 (2026)', label: 'P11 (2026)' })) {
+  throw new Error('Year 2026 is aggregate; P11 is a booked period')
+}
+const p01Ids = api.forecastDateCandidates(2026, 1)
+if (p01Ids.indexOf('202510') === -1) {
+  throw new Error('P01 FY2026 candidates must include calendar 202510, got ' + p01Ids.join(','))
+}
+if (api.forecastPeriodKey({ id: 'P11 (2026)', label: 'P11 (2026)' }) !== 'P2026-11') {
+  throw new Error('P11 period key should be P2026-11')
+}
+
+const altDateDim = { key: 'dimensions1', id: 'Date' }
+const altRows = [
+  { Date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' } }
+]
+const lastFromId = api.lastBookedActualDate(altRows, altDateDim, versionDim, 'Actual')
+if (!lastFromId || lastFromId.getFullYear() !== 2026 || lastFromId.getMonth() !== 7) {
+  throw new Error('Last booked should read Date by id as well as key')
 }
 
 console.log('forecast layout tests passed')
