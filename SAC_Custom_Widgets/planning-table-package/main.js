@@ -1163,32 +1163,9 @@
           this._primeForecastDateMembers()
         }
       }
-      const forecastModeNow = isForecastTableType(this.tableType || (this._props && this._props.tableType))
-      const tableTypeEnteringForecast = !!(changedProps && changedProps.tableType && isForecastTableType(changedProps.tableType))
-      const granularityChanged = !!(changedProps && Object.prototype.hasOwnProperty.call(changedProps, 'timeframeGranularity'))
-      if (forecastModeNow && (tableTypeEnteringForecast || granularityChanged)) {
-        this._syncForecastDrillLevel()
-      }
       if (!this._editing) {
         this.render()
       }
-    }
-
-    _syncForecastDrillLevel () {
-      const binding = this._resolveDataBinding()
-      const metadata = binding && binding.metadata
-      const dimensions = parseMetadata(metadata).dimensions
-      const dateDim = (dimensions || []).find(isDateDim)
-      if (!dateDim) {
-        return
-      }
-      const grain = grainKeyOf(this.timeframeGranularity || 'Month')
-      if (this._forecastDrillDim === dateDim.key && this._forecastDrillLevel === grain) {
-        return
-      }
-      this._forecastDrillDim = dateDim.key
-      this._forecastDrillLevel = grain
-      this._applyHierarchyLevel(dateDim, grain)
     }
 
     getLastChange () {
