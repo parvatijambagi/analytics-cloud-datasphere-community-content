@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.21'
+  const WIDGET_VERSION = '1.3.22'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1873,10 +1873,10 @@
 
       const forecastDiagnostic = forecastMode && this._forecastCache && this._forecastCache.diagnostic
       const diagnosticHtml = forecastDiagnostic
-        ? `<div class="forecast-diagnostic" style="margin-top:6px;padding:6px 8px;font-size:11px;color:#556b82;background:#f5f6f7;border:1px dashed #d9d9d9">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
+        ? `<div class="forecast-diagnostic" style="position:sticky;top:0;z-index:5;margin-bottom:6px;padding:6px 8px;font-size:11px;color:#8a3b00;background:#fff4e5;border:1px solid #f0b429">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
         : ''
 
-      this._tableWrap.innerHTML = table + diagnosticHtml
+      this._tableWrap.innerHTML = diagnosticHtml + table
       this._tableWrap.querySelectorAll('thead tr.axis th.measure').forEach(cell => {
         cell.style.background = headerBg
         cell.style.color = headerFg
@@ -2479,6 +2479,9 @@
         parts.push('getData calls: ' + (dbg.getDataCalls || 0) + ' (ok: ' + (dbg.getDataOk || 0) + ', empty: ' + (dbg.getDataNulls || 0) + ')')
         if (dbg.getDataErrors && dbg.getDataErrors.length) {
           parts.push('getData error: ' + dbg.getDataErrors[0])
+        }
+        if (dbg.sampleSelections && dbg.sampleSelections.length) {
+          parts.push('sample selection: ' + dbg.sampleSelections[0])
         }
       }
       if (dbg.fatalError) {
