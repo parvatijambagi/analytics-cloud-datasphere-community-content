@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.24'
+  const WIDGET_VERSION = '1.3.25'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -2142,31 +2142,15 @@
         selection[key] = shape && shape.wrapDate ? (typeof value === 'object' ? value : { id: value }) : value
       }
       const putDim = (dim, memberId) => {
-        if (!dim || memberId == null || memberId === '') {
+        if (!dim || memberId == null || memberId === '' || !dim.id) {
           return
         }
-        ;[dim.id, dim.key, dim.description].filter(Boolean).forEach(key => putValue(key, memberId))
+        putValue(dim.id, memberId)
       }
-      if (shape && shape.fromRow) {
-        const skipKeys = {}
-        ;[dateDim, versionDim].forEach(dim => {
-          identList(dim || {}).forEach(key => {
-            skipKeys[key] = true
-          })
-        })
-        Object.keys(row || {}).forEach(key => {
-          if (skipKeys[key]) {
-            return
-          }
-          const cell = row[key]
-          if (!cell || typeof cell !== 'object' || cell.id == null || cell.id === '') {
-            return
-          }
-          if (cell.raw != null && !cell.label && !cell.description) {
-            return
-          }
-          putValue(key, cell.id)
-        })
+      if (shape && shape.clean) {
+        // Mirrors buildSelection(): only real model dimension IDs, plain string
+        // member IDs, no feed-key aliases (dimensions_0, PAR_ARE, etc.) and no
+        // object wrapping. This matches the documented ds.getData(selection) shape.
         ;(rowDims || []).concat(shape.stackedDims || []).forEach(dim => {
           if ((dateDim && dim.key === dateDim.key) || (versionDim && dim.key === versionDim.key)) {
             return
@@ -2176,6 +2160,26 @@
             putDim(dim, cell.id)
           }
         })
+        putDim(dateDim, dateId)
+        putDim(versionDim, versionId)
+        if (measure && measure.id) {
+          putValue(measure.id, measure.id)
+        }
+      } else if (shape && shape.fromRow) {
+        ;(rowDims || []).concat(shape.stackedDims || []).forEach(dim => {
+          if ((dateDim && dim.key === dateDim.key) || (versionDim && dim.key === versionDim.key)) {
+            return
+          }
+          const cell = rowCell(row, dim)
+          if (cell && cell.id && !isAllMember(cell)) {
+            putDim(dim, cell.id)
+          }
+        })
+        putDim(dateDim, dateId)
+        putDim(versionDim, versionId)
+        if (measure) {
+          putValue('@MeasureDimension', measure.id || measure.key)
+        }
       } else {
         const dateValue = shape.wrapDate ? { id: dateId } : dateId
         selection[shape.dateKey] = dateValue
@@ -2194,15 +2198,10 @@
             }
           }
         })
-      }
-      putDim(dateDim, dateId)
-      putDim(versionDim, versionId)
-      if (measure) {
-        const measureId = measure.id || measure.key
-        if (shape && shape.measureKey) {
-          putValue(shape.measureKey, shape.measureValue || measureId)
-        } else {
-          putValue('@MeasureDimension', measureId)
+        putDim(dateDim, dateId)
+        putDim(versionDim, versionId)
+        if (measure && !shape.measureKey) {
+          putValue('@MeasureDimension', measure.id || measure.key)
         }
       }
       const filters = this._dimFilters || {}
@@ -2220,6 +2219,7 @@
       }
       const stackedDims = (this._forecastQuery && this._forecastQuery.stackedDims) || []
       const preferred = [
+        { clean: true, wrapDate: false, stackedDims: stackedDims },
         { fromRow: true, wrapDate: false, stackedDims: stackedDims },
         { fromRow: true, wrapDate: true, stackedDims: stackedDims }
       ]
