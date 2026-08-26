@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.28'
+  const WIDGET_VERSION = '1.3.29'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1188,6 +1188,9 @@
       button.node-toggle:hover {
         color: #052c54;
       }
+      button.node-toggle.row-toggle {
+        padding: 0 4px 0 0;
+      }
       .drill-menu {
         position: absolute;
         min-width: 148px;
@@ -1654,8 +1657,11 @@
             }
             span += 1
           }
-          const canExpand = isDateDim(dimension) && memberHierarchyDepth(token) < 3
           const isAggregate = isAllMember(token) || isAggregateDateMember(token)
+          const hasChildrenHint = token.isNode != null ? !!token.isNode : (token.hasChildren != null ? !!token.hasChildren : null)
+          const canExpand = !isVersionDim(dimension) && (
+            isDateDim(dimension) ? (isAggregate || memberHierarchyDepth(token) < 3) : (hasChildrenHint == null ? true : hasChildrenHint)
+          )
           const expanded = canExpand && this._isNodeExpanded(dimension.key, isAggregate ? '(all)' : token.id)
           const toggle = canExpand
             ? `<button type="button" class="node-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(isAggregate ? '' : (token.id || ''))}" data-aggregate="${isAggregate ? '1' : '0'}" title="${expanded ? 'Collapse' : 'Drill to next level'}">›</button>`
@@ -1855,7 +1861,15 @@
         rowDims.forEach(dimension => {
           const cell = row[dimension.key] || {}
           const dimRule = firstMatchingRule(rules, 'dimension')
-          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign)}">${this._escape(cell.label || '')}</td>`
+          const depth = Number(cell.level || cell.hierarchyLevel || 0) || 0
+          const indentStyle = depth > 0 ? `padding-left:${padL + depth * 14}px;` : ''
+          const hasChildrenHint = cell.isNode != null ? !!cell.isNode : (cell.hasChildren != null ? !!cell.hasChildren : true)
+          const canExpandRow = !!cell.id && !isAllMember(cell) && hasChildrenHint
+          const expandedRow = canExpandRow && this._isNodeExpanded(dimension.key, cell.id)
+          const rowToggle = canExpandRow
+            ? `<button type="button" class="node-toggle row-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(cell.id)}" data-aggregate="0" title="${expandedRow ? 'Collapse' : 'Drill to next level'}">›</button>`
+            : ''
+          table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign + ';' + indentStyle)}">${rowToggle}${this._escape(cell.label || '')}</td>`
         })
         if (!rowDims.length) {
           table += `<td class="dim" style="${cellChrome}"></td>`
