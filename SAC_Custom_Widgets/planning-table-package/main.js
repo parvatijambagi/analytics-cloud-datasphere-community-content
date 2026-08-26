@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.23'
+  const WIDGET_VERSION = '1.3.24'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -2283,10 +2283,16 @@
       this._forecastCache = { key: key, loading: true, ready: false, cells: (cache && cache.cells) || {}, lastBooked: cache && cache.lastBooked, failedAt: 0 }
       this._forecastDebug = { getDataCalls: 0, getDataNulls: 0, getDataOk: 0, getDataErrors: [], getDataAvailable: null, sampleSelections: [] }
       Promise.resolve().then(() => this._loadForecastCells(rowTuples || [], key)).catch(err => {
-        this._debug().fatalError = String((err && err.message) || err)
+        const dbg = this._debug()
+        dbg.fatalError = String((err && err.stack) || (err && err.message) || err)
+        try { console.error('[PlanningTable Forecast] load failed', err) } catch (ignore) {}
         if (this._forecastCache && this._forecastCache.key === key) {
           this._forecastCache.loading = false
           this._forecastCache.failedAt = Date.now()
+          this._forecastCache.diagnostic = this._buildForecastDiagnostic(dbg)
+        }
+        if (!this._editing) {
+          this.render()
         }
       })
     }
@@ -2298,6 +2304,14 @@
       const measures = query.measures || []
       const rowDims = query.rowDims || []
       if (!dateDim) {
+        if (this._forecastCache && this._forecastCache.key === key) {
+          this._forecastCache.loading = false
+          this._forecastCache.failedAt = Date.now()
+          this._forecastCache.diagnostic = 'no Date dimension resolved for Forecast Layout'
+          if (!this._editing) {
+            this.render()
+          }
+        }
         return
       }
       const ds = this._getDataSource()
