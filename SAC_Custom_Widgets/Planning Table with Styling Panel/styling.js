@@ -215,8 +215,8 @@
           <select id="timeframeGranularity">
             <option>Day</option>
             <option>Week</option>
-            <option>Month</option>
-            <option selected>Quarter</option>
+            <option selected>Month</option>
+            <option>Quarter</option>
             <option>Year</option>
           </select>
           <label for="timeframeRange">Range:</label>
@@ -457,6 +457,7 @@
       })
       this._draftExtra = []
       this._forecastDirty = false
+      this._uiTableType = null
       this._versions = [{ id: 'Actual', name: 'Actual' }, { id: 'EPMplusA', name: 'EPMplusA' }, { id: 'Budget', name: 'Budget' }, { id: 'Forecast', name: 'Forecast' }]
       this._dates = [{ id: 'Today', name: 'Today' }, { id: 'Current Period', name: 'Current Period' }]
       this._shadowRoot.querySelectorAll('.tab').forEach(tab => {
@@ -477,6 +478,11 @@
       }
       byId('tableType').addEventListener('change', () => {
         const type = this._val('tableType')
+        this._uiTableType = type
+        this.tableType = type
+        this.dispatchEvent(new CustomEvent('propertiesChanged', {
+          detail: { properties: { tableType: type } }
+        }))
         if (type === 'Cross-Tab') {
           this._forecastDirty = false
           this._applyTableType()
@@ -845,15 +851,22 @@
       }
     }
 
+    _resolvedUiTableType () {
+      const raw = this._uiTableType || this.tableType || this._val('tableType') || 'Cross-Tab'
+      return /forecast/i.test(String(raw)) && !/cross[- ]?tab/i.test(String(raw)) ? 'Forecast' : 'Cross-Tab'
+    }
+
     _loadTableType () {
-      if (this._forecastDirty) {
+      const type = this._resolvedUiTableType()
+      const select = this._shadowRoot.getElementById('tableType')
+      if (select) {
+        select.value = type
+      }
+      this._uiTableType = type
+      if (this._forecastDirty && type === 'Forecast') {
         this._toggleForecast()
         return
       }
-      const type = /forecast/i.test(String(this.tableType || '')) && !/cross[- ]?tab/i.test(String(this.tableType || ''))
-        ? 'Forecast'
-        : 'Cross-Tab'
-      this._shadowRoot.getElementById('tableType').value = type
       const setIf = (id, value) => {
         if (value != null && this._shadowRoot.getElementById(id)) {
           this._shadowRoot.getElementById(id).value = String(value)
@@ -861,7 +874,7 @@
       }
       setIf('cutOverMode', this._resolvedCutOverMode())
       setIf('timeframeType', this.timeframeType || 'Forecast')
-      setIf('timeframeGranularity', this.timeframeGranularity || 'Quarter')
+      setIf('timeframeGranularity', this.timeframeGranularity || 'Month')
       setIf('timeframeRange', this.timeframeRange || 'Year')
       setIf('lookBackAdditional', this.lookBackAdditional == null ? 0 : this.lookBackAdditional)
       setIf('lookBackAdditionalUnit', this.lookBackAdditionalUnit || 'Year')
@@ -881,7 +894,7 @@
       this.dispatchEvent(new CustomEvent('propertiesChanged', {
         detail: {
           properties: {
-            tableType: this._val('tableType'),
+            tableType: this._uiTableType || this._val('tableType'),
             lookBackOn: this._val('lookBackOn'),
             lookAheadOn: this._val('lookAheadOn'),
             cutOverMode: mode,
@@ -1030,11 +1043,33 @@
       assign('readOnly', changedProps.readOnly)
       ;['tableType', 'lookBackOn', 'lookAheadOn', 'cutOverMode', 'cutOverDate', 'timeframeType', 'timeframeGranularity', 'timeframeRange', 'lookBackAdditional', 'lookBackAdditionalUnit', 'lookAheadAdditional', 'lookAheadAdditionalUnit', 'sumFor', 'additionalVersionsJson'].forEach(key => {
         if (changedProps && changedProps[key] !== undefined) {
+          if (key === 'tableType') {
+            const incoming = /forecast/i.test(String(changedProps.tableType)) && !/cross[- ]?tab/i.test(String(changedProps.tableType))
+              ? 'Forecast'
+              : 'Cross-Tab'
+            if (this._uiTableType === 'Forecast' && incoming === 'Cross-Tab' && this._val('tableType') === 'Forecast') {
+              return
+            }
+            this._uiTableType = incoming
+            this.tableType = incoming
+            return
+          }
           this[key] = changedProps[key]
         }
       })
       const binding = (changedProps && changedProps.dataBinding) || this.dataBinding
       this._renderColumnDimList(binding, this.columnDimension || colMode)
+      const keys = Object.keys(changedProps || {})
+      const bindingOnly = keys.length > 0 && keys.every(key => key === 'dataBinding')
+      if (bindingOnly) {
+        this._loadModelCatalog()
+        const select = this._shadowRoot.getElementById('tableType')
+        if (select) {
+          select.value = this._resolvedUiTableType()
+        }
+        this._toggleForecast()
+        return
+      }
       this._loadTableType()
     }
   }

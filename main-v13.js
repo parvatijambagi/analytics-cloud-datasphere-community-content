@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.16'
+  const WIDGET_VERSION = '1.3.17'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1247,10 +1247,15 @@
       this._dimFilters = {}
       this._drillLevels = {}
       this._forecastCache = null
+      this._chosenTableType = ''
     }
 
     onCustomWidgetResize () {
       // Layout is CSS flex; no extra work required.
+    }
+
+    _resolvedTableType () {
+      return this._chosenTableType || this.tableType || (this._props && this._props.tableType) || 'Cross-Tab'
     }
 
     onCustomWidgetAfterUpdate (changedProps) {
@@ -1258,23 +1263,29 @@
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
       }
-      if (changedProps && changedProps.tableType && this._lastTableType && changedProps.tableType !== this._lastTableType) {
-        this._dimFilters = {}
-        this._forecastPrimeStarted = false
-        this._forecastDateMembers = []
-        this._forecastCache = null
-        this._forecastDrillDim = null
-        this._forecastDrillLevel = null
-        this._forecastDrillAt = 0
-      }
       if (changedProps && changedProps.tableType) {
-        this._lastTableType = changedProps.tableType
-        if (isForecastTableType(changedProps.tableType)) {
+        const keys = Object.keys(changedProps)
+        const echoedDefault = isForecastTableType(this._chosenTableType) &&
+          !isForecastTableType(changedProps.tableType) &&
+          changedProps.dataBinding &&
+          keys.length > 1
+        if (!echoedDefault) {
+          this._chosenTableType = changedProps.tableType
+          this._lastTableType = changedProps.tableType
           this._forecastPrimeStarted = false
-          this._primeForecastDateMembers()
+          this._forecastDateMembers = []
+          this._forecastCache = null
+          this._forecastDrillDim = null
+          this._forecastDrillLevel = null
+          this._forecastDrillAt = 0
+          this._forecastDrillTries = 0
+          this._clearForecastDateFilter()
+          if (isForecastTableType(changedProps.tableType)) {
+            this._primeForecastDateMembers()
+          }
         }
       }
-      const forecastModeNow = isForecastTableType(this.tableType || (this._props && this._props.tableType))
+      const forecastModeNow = isForecastTableType(this._resolvedTableType())
       if (forecastModeNow) {
         this._syncForecastDrillLevel()
         this._primeForecastDateMembers()
@@ -1300,11 +1311,18 @@
         this._forecastDrillLevel = grain
         return
       }
+      if ((this._forecastDrillTries || 0) >= 3) {
+        return
+      }
       const now = Date.now()
       if (this._forecastDrillAt && now - this._forecastDrillAt < 2000) {
         return
       }
       this._forecastDrillAt = now
+      if (!this._forecastDrillTries) {
+        this._clearForecastDateFilter()
+      }
+      this._forecastDrillTries = (this._forecastDrillTries || 0) + 1
       this._forecastDrillDim = null
       this._forecastDrillLevel = null
       this._applyHierarchyLevel(dateDim, grain)
@@ -1451,7 +1469,7 @@
         view = view.filter(row => ((row[dimension.key] && row[dimension.key].id) || '') === selected)
       })
 
-      const forecastMode = isForecastTableType(this.tableType || (this._props && this._props.tableType))
+      const forecastMode = isForecastTableType(this._resolvedTableType())
       const dateDim = selectorDims.concat(rowDims).find(isDateDim) || dimensions.find(isDateDim) || null
       const versionDim = selectorDims.concat(rowDims).find(isVersionDim) || dimensions.find(isVersionDim) || null
       let extraVersions = []
@@ -2085,7 +2103,7 @@
     }
 
     _ensureForecastCells (rowTuples) {
-      if (!isForecastTableType(this.tableType || (this._props && this._props.tableType))) {
+      if (!isForecastTableType(this._resolvedTableType())) {
         return
       }
       const query = this._forecastQuery
@@ -2143,13 +2161,6 @@
               await ds.expandNode(dimId, member.id)
             } else if (typeof ds.expandMember === 'function') {
               await ds.expandMember(dimId, member.id)
-            }
-          } catch (ignore) {}
-        }
-        if (monthMembers.length) {
-          try {
-            if (typeof ds.setDimensionFilter === 'function') {
-              await ds.setDimensionFilter(dimId, monthMembers.map(item => item.id))
             }
           } catch (ignore) {}
         }
@@ -2294,7 +2305,7 @@
     }
 
     _primeForecastDateMembers () {
-      if (!isForecastTableType(this.tableType || (this._props && this._props.tableType))) {
+      if (!isForecastTableType(this._resolvedTableType())) {
         return
       }
       const binding = this._resolveDataBinding()
@@ -2371,7 +2382,7 @@
       }
       this._drillLevels[dimension.key] = levelKey
       const ds = this._getDataSource()
-      const dimId = dimension.id || dimension.key
+      const dimIds = [dimension.id, dimension.key, dimension.description].filter((id, index, list) => id && list.indexOf(id) === index)
       const levelNumber = ({ all: 0, year: 1, quarter: 2, month: 3, week: 3, day: 4 })[levelKey]
       const n = levelNumber != null ? levelNumber : Number(levelKey)
       const call = async (name, args) => {
@@ -2385,25 +2396,46 @@
           return false
         }
       }
-      if (levelKey === 'all') {
-        await call('removeHierarchy', [dimId])
-        await call('setHierarchyLevel', [dimId, 0])
-        await call('setDrillLevel', [dimId, 0])
-      } else {
-        await call('setHierarchyLevel', [dimId, n])
-        await call('setDrillLevel', [dimId, n])
-        await call('setInitialDrillLevel', [dimId, n])
+      for (let i = 0; i < dimIds.length; i++) {
+        const dimId = dimIds[i]
+        if (levelKey === 'all') {
+          await call('removeHierarchy', [dimId])
+          await call('setHierarchyLevel', [dimId, 0])
+          await call('setDrillLevel', [dimId, 0])
+        } else {
+          await call('setHierarchyLevel', [dimId, n])
+          await call('setDrillLevel', [dimId, n])
+          await call('setInitialDrillLevel', [dimId, n])
+          try {
+            const hierarchies = ds && ds.getHierarchies ? await ds.getHierarchies(dimId) : []
+            if (hierarchies && hierarchies.length) {
+              const pick = hierarchies.find(item => /yqm|yhqm|time|parent|date/i.test(JSON.stringify(item))) || hierarchies[0]
+              const hierarchyId = pick.id || pick.hierarchyId || pick.name || pick
+              await call('setHierarchy', [dimId, hierarchyId])
+              await call('setHierarchyLevel', [dimId, n])
+            }
+          } catch (ignore) {}
+        }
+      }
+      this.render()
+    }
+
+    async _clearForecastDateFilter () {
+      const binding = this._resolveDataBinding()
+      const dimensions = parseMetadata(binding && binding.metadata).dimensions
+      const dateDim = (dimensions || []).find(isDateDim)
+      const ds = this._getDataSource()
+      if (!ds || !dateDim) {
+        return
+      }
+      const ids = [dateDim.id, dateDim.key].filter((id, index, list) => id && list.indexOf(id) === index)
+      for (let i = 0; i < ids.length; i++) {
         try {
-          const hierarchies = ds && ds.getHierarchies ? await ds.getHierarchies(dimId) : []
-          if (hierarchies && hierarchies.length) {
-            const pick = hierarchies.find(item => /yqm|yhqm|time|parent|date/i.test(JSON.stringify(item))) || hierarchies[0]
-            const hierarchyId = pick.id || pick.hierarchyId || pick.name || pick
-            await call('setHierarchy', [dimId, hierarchyId])
-            await call('setHierarchyLevel', [dimId, n])
+          if (typeof ds.removeDimensionFilter === 'function') {
+            await ds.removeDimensionFilter(ids[i])
           }
         } catch (ignore) {}
       }
-      this.render()
     }
 
     async _applyDimensionFilter (dimension, memberId) {
