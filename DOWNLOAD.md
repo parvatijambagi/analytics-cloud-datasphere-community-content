@@ -1,4 +1,4 @@
-# How to download the Planning Table widget (v1.3.16)
+# How to download the Planning Table widget (v1.3.17)
 
 Do **not** use branch URLs that contain `cursor/stacked-column-headers-abca`.
 GitHub and many browsers treat `cursor` as the branch name and then look for a file
@@ -6,27 +6,27 @@ GitHub and many browsers treat `cursor` as the branch name and then look for a f
 
 Use **commit** links below (no slash in the ref). Right-click → **Save link as**.
 
-Pinned commit: `368559e6bb769d3e3876e091ea4006b0bb28406d`
+Pinned commit: `bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f`
 
 ## Files for SAC Custom Widgets
 
 1. Widget JSON  
-   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/368559e6bb769d3e3876e091ea4006b0bb28406d/PlanningTable.json
+   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f/PlanningTable.json
 
 2. Resource ZIP (`main-v13.js` + `styling-v13.js` at the zip root)  
-   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/368559e6bb769d3e3876e091ea4006b0bb28406d/PlanningTable-resources.zip
+   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f/PlanningTable-resources.zip
 
 jsDelivr mirrors (same commit):
 
-- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@368559e6bb769d3e3876e091ea4006b0bb28406d/PlanningTable.json
-- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@368559e6bb769d3e3876e091ea4006b0bb28406d/PlanningTable-resources.zip
+- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f/PlanningTable.json
+- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f/PlanningTable-resources.zip
 
 ## If the ZIP still will not save
 
 Download these two text files, then zip them **at the zip root** (no folder):
 
-- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/368559e6bb769d3e3876e091ea4006b0bb28406d/main-v13.js
-- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/368559e6bb769d3e3876e091ea4006b0bb28406d/styling-v13.js
+- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f/main-v13.js
+- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f/styling-v13.js
 
 ```bash
 zip PlanningTable-resources.zip main-v13.js styling-v13.js
@@ -34,7 +34,7 @@ zip PlanningTable-resources.zip main-v13.js styling-v13.js
 
 ## Whole-repo archive (always works on GitHub)
 
-https://github.com/parvatijambagi/analytics-cloud-datasphere-community-content/archive/368559e6bb769d3e3876e091ea4006b0bb28406d.zip
+https://github.com/parvatijambagi/analytics-cloud-datasphere-community-content/archive/bbf95ea14ebd7bf9ab26a172c49ef811c1dc1c6f.zip
 
 Then take `PlanningTable.json` and `PlanningTable-resources.zip` from the extracted folder.
 
@@ -44,4 +44,4 @@ In SAC go to **Custom Widgets** → **Add** → upload **JSON and ZIP as files f
 Do not paste a GitHub URL into SAC. The JSON uses `/main-v13.js` and `/styling-v13.js`,
 which SAC resolves from the ZIP. Uploading JSON alone causes a **404** for those scripts.
 
-Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.16**.
+Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.17**.
