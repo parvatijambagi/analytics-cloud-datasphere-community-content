@@ -30,11 +30,11 @@ The ZIP must keep `main-v13.js` and `styling-v13.js` at the archive root. Those 
 
 If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-**Re-upload JSON + ZIP** (widget version **1.3.18**). The toolbar must show **v1.3.18**. **Builder is native SAC** (same as 1.3.2): Rows, Columns with Measures nested, Filters, and the model dimension/measure lists. A custom Builder was what removed those pickers.
+**Re-upload JSON + ZIP** (widget version **1.3.19**). The toolbar must show **v1.3.19**. **Builder is native SAC** (same as 1.3.2): Rows, Columns with Measures nested, Filters, and the model dimension/measure lists. A custom Builder was what removed those pickers.
 
 SAC custom widgets only have **Builder** and **Styling** tabs. **Table Type** is a tab inside **Styling** (Table Type | Styling). Use it to choose Cross-Tab or Forecast Layout. Do not install a custom Builder panel.
 
-When **Table Type** is **Forecast Layout**, set Look Back On, Look Ahead On, Cut-Over Date, and Timeframe, then click **Apply**. The table then uses those settings: look-back version before the cut-over (for example Actual + extra look-back year) and look-ahead version after it (for example FC months in the range year). **Cancel** restores the last applied values.
+When **Table Type** is **Forecast Layout**, set Look Back On, Look Ahead On, Cut-Over Date, and Timeframe, then click **Apply**. The table then uses those settings: look-back version before the cut-over (for example Actual + extra look-back year) and look-ahead version after it (for example FC months in the range year). **Cancel** restores the last applied values. Choosing **Cross-Tab** switches the table back to the previous stacked Version layout immediately.
 
 - **Look Back On** / **Look Ahead On** — Version members from the selected model (result set plus `getMembers` when the data source allows it)
 - **Cut-Over Date** — **Today** (system date), **Specific Date...** (Date dimension members), **Last Booked (Actuals)** (latest date with the Look Back / Actuals version in the bound data)

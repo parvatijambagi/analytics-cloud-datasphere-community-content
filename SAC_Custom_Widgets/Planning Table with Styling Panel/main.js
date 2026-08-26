@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.18'
+  const WIDGET_VERSION = '1.3.19'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -706,6 +706,23 @@
 
   const isForecastTableType = value => /forecast/i.test(String(value || '')) && !/cross[- ]?tab/i.test(String(value || ''))
 
+  const isTableTypeEcho = (changedProps, currentType) => {
+    if (!changedProps || !changedProps.tableType) {
+      return false
+    }
+    if (!isForecastTableType(currentType) || isForecastTableType(changedProps.tableType)) {
+      return false
+    }
+    if (!changedProps.dataBinding) {
+      return false
+    }
+    if (changedProps.lookBackOn !== undefined || changedProps.lookAheadOn !== undefined || changedProps.cutOverMode !== undefined) {
+      return false
+    }
+    const keys = Object.keys(changedProps).filter(key => key !== 'dataBinding')
+    return keys.length === 1 && keys[0] === 'tableType'
+  }
+
   const synthesizeForecastAxis = (cutover, settings) => {
     const opts = settings || {}
     const grain = grainKeyOf(opts.granularity || 'Month')
@@ -1263,65 +1280,19 @@
       if (changedProps && changedProps.dataBinding) {
         this._bindingFromUpdate = changedProps.dataBinding
       }
-      if (changedProps && changedProps.tableType) {
-        const keys = Object.keys(changedProps)
-        const echoedDefault = isForecastTableType(this._chosenTableType) &&
-          !isForecastTableType(changedProps.tableType) &&
-          changedProps.dataBinding &&
-          keys.length > 1
-        if (!echoedDefault) {
-          this._chosenTableType = changedProps.tableType
-          this._lastTableType = changedProps.tableType
-          this._forecastPrimeStarted = false
-          this._forecastDateMembers = []
-          this._forecastCache = null
-          this._forecastDrillDim = null
-          this._forecastDrillLevel = null
-          this._forecastDrillAt = 0
-          this._forecastDrillTries = 0
-          if (isForecastTableType(changedProps.tableType)) {
-            this._primeForecastDateMembers()
-          }
-        }
-      }
-      const forecastModeNow = isForecastTableType(this._resolvedTableType())
-      if (forecastModeNow) {
-        this._syncForecastDrillLevel()
-        this._primeForecastDateMembers()
+      if (changedProps && changedProps.tableType && !isTableTypeEcho(changedProps, this._chosenTableType)) {
+        this._chosenTableType = changedProps.tableType
+        this._lastTableType = changedProps.tableType
+        this.tableType = changedProps.tableType
+        this._forecastCache = null
+        this._forecastResultRows = null
+        this._forecastDateMembers = []
+        this._forecastSelectionShape = null
+        this._forecastDrillTries = 0
       }
       if (!this._editing) {
         this.render()
       }
-    }
-
-    _syncForecastDrillLevel () {
-      const binding = this._resolveDataBinding()
-      const metadata = binding && binding.metadata
-      const data = binding && binding.data
-      const dimensions = parseMetadata(metadata).dimensions
-      const dateDim = (dimensions || []).find(isDateDim)
-      if (!dateDim) {
-        return
-      }
-      const grain = grainKeyOf(this.timeframeGranularity || 'Month')
-      const hasPeriodRows = (data || []).some(row => !isAggregateDateMember(rowCell(row, dateDim)))
-      if (hasPeriodRows) {
-        this._forecastDrillDim = dateDim.key
-        this._forecastDrillLevel = grain
-        return
-      }
-      if ((this._forecastDrillTries || 0) >= 3) {
-        return
-      }
-      const now = Date.now()
-      if (this._forecastDrillAt && now - this._forecastDrillAt < 2000) {
-        return
-      }
-      this._forecastDrillAt = now
-      this._forecastDrillTries = (this._forecastDrillTries || 0) + 1
-      this._forecastDrillDim = null
-      this._forecastDrillLevel = null
-      this._applyHierarchyLevel(dateDim, grain)
     }
 
     getLastChange () {
@@ -1430,7 +1401,14 @@
 
       const membersOf = dimension => {
         const seen = new Map()
-        const source = data.concat(this._forecastResultRows || [])
+        const source = data.concat(this._forecastDateMembers && dimension && isDateDim(dimension) ? this._forecastDateMembers.map(item => {
+          const row = {}
+          row[dimension.key] = item
+          if (dimension.id) {
+            row[dimension.id] = item
+          }
+          return row
+        }) : [])
         source.forEach(row => {
           const cell = rowCell(row, dimension)
           const id = cell.id || cell.label || ''
@@ -1469,19 +1447,6 @@
       const forecastMode = isForecastTableType(this._resolvedTableType())
       const dateDim = selectorDims.concat(rowDims).find(isDateDim) || dimensions.find(isDateDim) || null
       const versionDim = selectorDims.concat(rowDims).find(isVersionDim) || dimensions.find(isVersionDim) || null
-      if (forecastMode && this._forecastResultRows && this._forecastResultRows.length) {
-        view = this._forecastResultRows.slice()
-        selectorDims.forEach(dimension => {
-          if (isVersionDim(dimension) || isDateDim(dimension)) {
-            return
-          }
-          const selected = this._dimFilters[dimension.key]
-          if (!selected) {
-            return
-          }
-          view = view.filter(row => (rowCell(row, dimension).id || '') === selected)
-        })
-      }
       let extraVersions = []
       try {
         const parsed = JSON.parse(this.additionalVersionsJson || '[]')
@@ -1529,6 +1494,7 @@
           versionDim,
           measures,
           rowDims,
+          stackedDims,
           lookBackId,
           lookAheadId,
           extraVersions,
@@ -1986,7 +1952,12 @@
         if (isAll) {
           return { id: String(id || '(all)'), label: label || '(all)', isAll: true }
         }
-        return { id: String(id), label: label }
+        return {
+          id: String(id),
+          label: label,
+          parentId: String(item.parentId || item.parentKey || item.ParentId || ''),
+          level: item.level != null ? item.level : item.hierarchyLevel
+        }
       }).filter(Boolean)
     }
 
@@ -1996,8 +1967,11 @@
       }
       const calls = []
       if (parent == null) {
+        calls.push([dimId, 5000])
+        calls.push([dimId, 10000])
         calls.push([dimId])
-        calls.push([dimId, {}])
+        calls.push([dimId, { limit: 5000 }])
+        calls.push([dimId, { maxNumber: 5000 }])
         calls.push([dimId, { hierarchyLevel: 3 }])
         calls.push([dimId, { level: 3 }])
       } else {
@@ -2007,46 +1981,47 @@
         calls.push([dimId, { parent: id }])
         calls.push([dimId, id])
       }
-      const out = []
+      const raw = []
       for (let i = 0; i < calls.length; i++) {
         try {
           const result = await ds.getMembers.apply(ds, calls[i])
           const list = Array.isArray(result) ? result : ((result && result.members) || [])
-          list.forEach(item => out.push(item))
-          if (list.length) {
-            break
-          }
+          list.forEach(item => raw.push(item))
         } catch (ignore) {}
       }
-      return this._normalizeMembers(out, keepAll)
+      const seen = new Set()
+      return this._normalizeMembers(raw, keepAll).filter(item => {
+        if (!item || seen.has(item.id)) {
+          return false
+        }
+        seen.add(item.id)
+        return true
+      })
     }
 
     async _walkDateMembers (ds, dateDim) {
       const dimIds = [dateDim.id, dateDim.key].filter((id, index, list) => id && list.indexOf(id) === index)
       const seen = new Set()
       const out = []
-      const visit = async (parent, depth, dimId) => {
-        if (depth > 6) {
+      const add = member => {
+        if (!member || seen.has(member.id)) {
           return
         }
-        const list = await this._listMembers(ds, dimId, parent, true)
-        for (let i = 0; i < list.length; i++) {
-          const member = list[i]
-          if (!member || seen.has(member.id)) {
-            continue
-          }
-          seen.add(member.id)
-          if (!member.isAll) {
-            out.push(member)
-          }
-          if (member.isAll || isAggregateDateMember(member) || memberHierarchyDepth(member) < 3) {
-            await visit(member, depth + 1, dimId)
-          }
+        seen.add(member.id)
+        if (!member.isAll) {
+          out.push(member)
         }
       }
       for (let i = 0; i < dimIds.length; i++) {
-        await visit(null, 0, dimIds[i])
-        if (out.length) {
+        const dimId = dimIds[i]
+        const roots = await this._listMembers(ds, dimId, null, true)
+        roots.forEach(add)
+        const walkParents = roots.filter(item => item && (item.isAll || isAggregateDateMember(item) || memberHierarchyDepth(item) < 3))
+        for (let p = 0; p < walkParents.length; p++) {
+          const children = await this._listMembers(ds, dimId, walkParents[p], true)
+          children.forEach(add)
+        }
+        if (out.some(item => !isAggregateDateMember(item))) {
           break
         }
       }
@@ -2094,23 +2069,76 @@
 
     _forecastSelection (dateDim, versionDim, measure, row, rowDims, dateId, versionId, shape) {
       const selection = {}
-      const dateValue = shape.wrapDate ? { id: dateId } : dateId
-      selection[shape.dateKey] = dateValue
-      if (shape.versionKey && versionId) {
-        selection[shape.versionKey] = shape.wrapDate ? { id: versionId } : versionId
-      }
-      if (shape.measureKey && shape.measureValue) {
-        selection[shape.measureKey] = shape.measureValue
-      }
-      ;(rowDims || []).forEach(dim => {
-        const cell = rowCell(row, dim)
-        if (cell && cell.id && !isAllMember(cell)) {
-          const key = (shape.rowKeyField && dim[shape.rowKeyField]) || dim.id || dim.key
-          if (key) {
-            selection[key] = shape.wrapDate ? { id: cell.id } : cell.id
-          }
+      const putValue = (key, value) => {
+        if (!key || value == null || value === '') {
+          return
         }
-      })
+        selection[key] = shape && shape.wrapDate ? (typeof value === 'object' ? value : { id: value }) : value
+      }
+      const putDim = (dim, memberId) => {
+        if (!dim || memberId == null || memberId === '') {
+          return
+        }
+        ;[dim.id, dim.key, dim.description].filter(Boolean).forEach(key => putValue(key, memberId))
+      }
+      if (shape && shape.fromRow) {
+        const skipKeys = {}
+        ;[dateDim, versionDim].forEach(dim => {
+          identList(dim || {}).forEach(key => {
+            skipKeys[key] = true
+          })
+        })
+        Object.keys(row || {}).forEach(key => {
+          if (skipKeys[key]) {
+            return
+          }
+          const cell = row[key]
+          if (!cell || typeof cell !== 'object' || cell.id == null || cell.id === '') {
+            return
+          }
+          if (cell.raw != null && !cell.label && !cell.description) {
+            return
+          }
+          putValue(key, cell.id)
+        })
+        ;(rowDims || []).concat(shape.stackedDims || []).forEach(dim => {
+          if ((dateDim && dim.key === dateDim.key) || (versionDim && dim.key === versionDim.key)) {
+            return
+          }
+          const cell = rowCell(row, dim)
+          if (cell && cell.id && !isAllMember(cell)) {
+            putDim(dim, cell.id)
+          }
+        })
+      } else {
+        const dateValue = shape.wrapDate ? { id: dateId } : dateId
+        selection[shape.dateKey] = dateValue
+        if (shape.versionKey && versionId) {
+          selection[shape.versionKey] = shape.wrapDate ? { id: versionId } : versionId
+        }
+        if (shape.measureKey && shape.measureValue) {
+          selection[shape.measureKey] = shape.measureValue
+        }
+        ;(rowDims || []).forEach(dim => {
+          const cell = rowCell(row, dim)
+          if (cell && cell.id && !isAllMember(cell)) {
+            const key = (shape.rowKeyField && dim[shape.rowKeyField]) || dim.id || dim.key
+            if (key) {
+              selection[key] = shape.wrapDate ? { id: cell.id } : cell.id
+            }
+          }
+        })
+      }
+      putDim(dateDim, dateId)
+      putDim(versionDim, versionId)
+      if (measure) {
+        const measureId = measure.id || measure.key
+        if (shape && shape.measureKey) {
+          putValue(shape.measureKey, shape.measureValue || measureId)
+        } else {
+          putValue('@MeasureDimension', measureId)
+        }
+      }
       const filters = this._dimFilters || {}
       Object.keys(filters).forEach(dimKey => {
         if (filters[dimKey]) {
@@ -2124,33 +2152,37 @@
       if (shape) {
         return this._readDataCell(ds, this._forecastSelection(dateDim, versionDim, measure, row, rowDims, dateId, versionId, shape))
       }
+      const stackedDims = (this._forecastQuery && this._forecastQuery.stackedDims) || []
+      const preferred = [
+        { fromRow: true, wrapDate: false, stackedDims: stackedDims },
+        { fromRow: true, wrapDate: true, stackedDims: stackedDims }
+      ]
+      for (let i = 0; i < preferred.length; i++) {
+        const cell = await this._readDataCell(ds, this._forecastSelection(dateDim, versionDim, measure, row, rowDims, dateId, versionId, preferred[i]))
+        if (cell) {
+          this._forecastSelectionShape = preferred[i]
+          return cell
+        }
+      }
       const dateKeys = [dateDim.id, dateDim.key, dateDim.description].filter(Boolean)
       const versionKeys = versionDim ? [versionDim.id, versionDim.key, versionDim.description].filter(Boolean) : [null]
       const measureKeys = ['@MeasureDimension', measure.id, measure.key].filter(Boolean)
       const measureValues = [measure.id, measure.key].filter(Boolean)
-      const rowFields = ['id', 'key']
-      const wraps = [false, true]
       for (let d = 0; d < dateKeys.length; d++) {
-        for (let v = 0; v < versionKeys.length; v++) {
-          for (let m = 0; m < measureKeys.length; m++) {
-            for (let mv = 0; mv < measureValues.length; mv++) {
-              for (let r = 0; r < rowFields.length; r++) {
-                for (let w = 0; w < wraps.length; w++) {
-                  const nextShape = {
-                    dateKey: dateKeys[d],
-                    versionKey: versionKeys[v],
-                    measureKey: measureKeys[m],
-                    measureValue: measureValues[mv],
-                    rowKeyField: rowFields[r],
-                    wrapDate: wraps[w]
-                  }
-                  const cell = await this._readDataCell(ds, this._forecastSelection(dateDim, versionDim, measure, row, rowDims, dateId, versionId, nextShape))
-                  if (cell) {
-                    this._forecastSelectionShape = nextShape
-                    return cell
-                  }
-                }
-              }
+        for (let v = 0; v < Math.min(versionKeys.length, 2); v++) {
+          for (let m = 0; m < Math.min(measureKeys.length, 2); m++) {
+            const nextShape = {
+              dateKey: dateKeys[d],
+              versionKey: versionKeys[v],
+              measureKey: measureKeys[m],
+              measureValue: measureValues[0],
+              rowKeyField: 'id',
+              wrapDate: false
+            }
+            const cell = await this._readDataCell(ds, this._forecastSelection(dateDim, versionDim, measure, row, rowDims, dateId, versionId, nextShape))
+            if (cell) {
+              this._forecastSelectionShape = nextShape
+              return cell
             }
           }
         }
@@ -2172,6 +2204,7 @@
         (query.extraVersions || []).join(','),
         this.timeframeGranularity,
         this.cutOverMode || this.cutOverDate,
+        JSON.stringify(this._dimFilters || {}),
         (rowTuples || []).map(row => rowKey(row, query.rowDims || [])).join(';')
       ].join('|')
       const cache = this._forecastCache
@@ -2200,33 +2233,7 @@
         return
       }
       const ds = this._getDataSource()
-      let dateMembers = ds ? await this._walkDateMembers(ds, dateDim) : []
-      const dimIds = [dateDim.id, dateDim.key].filter((id, index, list) => id && list.indexOf(id) === index)
-      if (ds) {
-        for (let d = 0; d < dimIds.length; d++) {
-          const dimId = dimIds[d]
-          const roots = await this._listMembers(ds, dimId, null, true)
-          const expandList = roots.concat(dateMembers)
-          for (let i = 0; i < expandList.length; i++) {
-            const member = expandList[i]
-            if (!member || (!member.isAll && !isAggregateDateMember(member) && memberHierarchyDepth(member) >= 3)) {
-              continue
-            }
-            try {
-              if (typeof ds.expandNode === 'function') {
-                await ds.expandNode(dimId, member.id)
-              } else if (typeof ds.expandMember === 'function') {
-                await ds.expandMember(dimId, member.id)
-              }
-            } catch (ignore) {}
-          }
-        }
-        dateMembers = await this._walkDateMembers(ds, dateDim)
-        const resultRows = await this._readResultSet(ds)
-        if (resultRows.length) {
-          this._forecastResultRows = resultRows
-        }
-      }
+      const dateMembers = ds ? await this._walkDateMembers(ds, dateDim) : []
       if (dateMembers.length) {
         this._forecastDateMembers = dateMembers
       }
@@ -2257,7 +2264,8 @@
           fy: fy,
           period: period,
           date: { id: 'P' + String(period).padStart(2, '0') + ' (' + fy + ')', label: 'P' + String(period).padStart(2, '0') + ' (' + fy + ')' },
-          ids: fromMembers.map(item => item.id).concat(forecastDateCandidates(fy, period))
+          ids: fromMembers.map(item => item.id).concat(forecastDateCandidates(fy, period)),
+          realId: fromMembers[0] && fromMembers[0].id
         })
       }
       ;[fy - 1, fy + 1].forEach(year => {
@@ -2269,7 +2277,8 @@
           fy: year,
           period: 0,
           date: { id: String(year), label: String(year) },
-          ids: fromMembers.map(item => item.id).concat([String(year)])
+          ids: fromMembers.map(item => item.id).concat([String(year)]),
+          realId: fromMembers[0] && fromMembers[0].id
         })
       })
       const cells = {}
@@ -2280,7 +2289,22 @@
       const lookBackId = versionIds[query.lookBackId] || query.lookBackId
       let workingDateIds = null
       const shape = this._forecastSelectionShape || null
+      const valuesDiffer = (left, right) => left && right && left.raw !== right.raw
       if (ds && probeMeasure) {
+        const realMap = {}
+        periods.forEach(entry => {
+          if (entry.period && entry.realId) {
+            realMap[entry.fy + '-' + entry.period] = entry.realId
+          }
+        })
+        const realKeys = Object.keys(realMap)
+        if (realKeys.length >= 2) {
+          const first = await this._fetchForecastValue(ds, dateDim, versionDim, probeMeasure, probeRow, rowDims, realMap[realKeys[0]], lookBackId, shape)
+          const second = await this._fetchForecastValue(ds, dateDim, versionDim, probeMeasure, probeRow, rowDims, realMap[realKeys[Math.min(10, realKeys.length - 1)]], lookBackId, this._forecastSelectionShape || shape)
+          if (valuesDiffer(first, second)) {
+            workingDateIds = realMap
+          }
+        }
         for (let p = 0; p < periods.length && !workingDateIds; p++) {
           const entry = periods[p]
           if (!entry.period) {
@@ -2288,13 +2312,16 @@
           }
           for (let i = 0; i < entry.ids.length; i++) {
             const sample = entry.ids[i]
-            const cell = await this._fetchForecastValue(ds, dateDim, versionDim, probeMeasure, probeRow, rowDims, sample, lookBackId, shape)
+            const cell = await this._fetchForecastValue(ds, dateDim, versionDim, probeMeasure, probeRow, rowDims, sample, lookBackId, this._forecastSelectionShape || shape)
             if (!cell) {
               continue
             }
-            const mapped = {}
+            const mapped = Object.assign({}, realMap)
             periods.forEach(other => {
               if (!other.period) {
+                return
+              }
+              if (mapped[other.fy + '-' + other.period]) {
                 return
               }
               const start = fiscalPeriodStart(other.fy, other.period)
@@ -2311,8 +2338,9 @@
             mapped[entry.fy + '-' + entry.period] = sample
             const other = periods.find(item => item.period && item.period !== entry.period)
             if (other) {
-              const otherCell = await this._fetchForecastValue(ds, dateDim, versionDim, probeMeasure, probeRow, rowDims, mapped[other.fy + '-' + other.period], lookBackId, this._forecastSelectionShape || shape)
-              if (otherCell && otherCell.raw === cell.raw) {
+              const otherId = mapped[other.fy + '-' + other.period]
+              const otherCell = await this._fetchForecastValue(ds, dateDim, versionDim, probeMeasure, probeRow, rowDims, otherId, lookBackId, this._forecastSelectionShape || shape)
+              if (otherCell && !valuesDiffer(cell, otherCell)) {
                 continue
               }
             }
@@ -2327,7 +2355,9 @@
           const row = rows[r]
           for (let p = 0; p < periods.length; p++) {
             const entry = periods[p]
-            const dateId = entry.period ? workingDateIds[entry.fy + '-' + entry.period] : entry.ids[0]
+            const dateId = entry.period
+              ? workingDateIds[entry.fy + '-' + entry.period]
+              : (entry.realId || entry.ids[0])
             if (!dateId) {
               continue
             }
@@ -2356,8 +2386,7 @@
       if (!this._forecastCache || this._forecastCache.key !== key) {
         return
       }
-      const resultHasPeriods = (this._forecastResultRows || []).some(row => dateDim && !isAggregateDateMember(rowCell(row, dateDim)))
-      const ready = Object.keys(cells).length > 0 || resultHasPeriods
+      const ready = Object.keys(cells).length > 0
       this._forecastCache = {
         key: key,
         loading: false,
@@ -2366,7 +2395,7 @@
         lastBooked: lastBooked,
         failedAt: ready ? 0 : Date.now()
       }
-      if ((ready || dateMembers.length || (this._forecastResultRows && this._forecastResultRows.length)) && !this._editing) {
+      if ((ready || dateMembers.length) && !this._editing) {
         this.render()
       }
     }
@@ -2389,6 +2418,7 @@
           versionDim: versionDim,
           measures: parsed.measures,
           rowDims: [],
+          stackedDims: [],
           lookBackId: this.lookBackOn || 'Actual',
           lookAheadId: this.lookAheadOn || 'FC',
           extraVersions: [],

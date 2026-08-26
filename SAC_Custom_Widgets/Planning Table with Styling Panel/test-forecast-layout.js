@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate forecast helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType, versionMatches, sameForecastDate, isAggregateDateMember, forecastDateCandidates, forecastPeriodKey }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseLooseDate, memberDate, lastBookedActualDate, resolveCutOver, pickForecastDateMembers, formatForecastDateLabel, isForecastLookBack, fiscalYearOf, fiscalPeriodOf, synthesizeForecastAxis, mergeForecastAxis, isForecastTableType, isTableTypeEcho, versionMatches, sameForecastDate, isAggregateDateMember, forecastDateCandidates, forecastPeriodKey }\n')()
 
 const p01 = api.parseLooseDate('P01 (2026)')
 if (!p01 || p01.getFullYear() !== 2025 || p01.getMonth() !== 9) {
@@ -185,6 +185,19 @@ const altRows = [
 const lastFromId = api.lastBookedActualDate(altRows, altDateDim, versionDim, 'Actual')
 if (!lastFromId || lastFromId.getFullYear() !== 2026 || lastFromId.getMonth() !== 7) {
   throw new Error('Last booked should read Date by id as well as key')
+}
+
+if (!api.isTableTypeEcho({ tableType: 'Cross-Tab', dataBinding: {} }, 'Forecast')) {
+  throw new Error('Default Cross-Tab echoed with dataBinding after Forecast Apply must be ignored')
+}
+if (api.isTableTypeEcho({ tableType: 'Cross-Tab', lookBackOn: 'Actual' }, 'Forecast')) {
+  throw new Error('Selecting Cross-Tab sends lookBackOn and must switch the table back')
+}
+if (api.isTableTypeEcho({ tableType: 'Cross-Tab' }, 'Forecast')) {
+  throw new Error('A Cross-Tab-only update must switch the table back')
+}
+if (api.isTableTypeEcho({ tableType: 'Forecast', dataBinding: {} }, 'Cross-Tab')) {
+  throw new Error('Applying Forecast must not be treated as an echo')
 }
 
 console.log('forecast layout tests passed')

@@ -1057,7 +1057,7 @@
             if (this._forecastDirty) {
               return
             }
-            if (this._appliedTableType === 'Forecast' && incoming === 'Cross-Tab') {
+            if (incoming === 'Cross-Tab' && this._appliedTableType === 'Forecast' && changedProps.dataBinding && changedProps.lookBackOn === undefined) {
               return
             }
             this._appliedTableType = incoming
