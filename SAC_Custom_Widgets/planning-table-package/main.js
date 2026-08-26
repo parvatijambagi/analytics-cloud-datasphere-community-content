@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.27'
+  const WIDGET_VERSION = '1.3.28'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1907,8 +1907,11 @@
       const diagnosticHtml = forecastDiagnostic
         ? `<div class="forecast-diagnostic" style="position:sticky;top:0;z-index:5;margin-bottom:6px;padding:6px 8px;font-size:11px;color:#8a3b00;background:#fff4e5;border:1px solid #f0b429">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
         : ''
+      const hierarchyHtml = this._hierarchyDiagnostic
+        ? `<div class="hierarchy-diagnostic" style="position:sticky;top:0;z-index:5;margin-bottom:6px;padding:6px 8px;font-size:11px;color:#0b5c2d;background:#e9f7ef;border:1px solid #6fcf97">Drill diagnostic: ${this._escape(this._hierarchyDiagnostic)}</div>`
+        : ''
 
-      this._tableWrap.innerHTML = diagnosticHtml + table
+      this._tableWrap.innerHTML = hierarchyHtml + diagnosticHtml + table
       this._tableWrap.querySelectorAll('thead tr.axis th.measure').forEach(cell => {
         cell.style.background = headerBg
         cell.style.color = headerFg
@@ -2722,27 +2725,52 @@
       const set = this._expandedNodes[dimension.key]
       const isOpen = set.has(key)
       const ds = this._getDataSource()
-      try {
-        if (isOpen) {
-          if (ds && typeof ds.collapseNode === 'function' && !isAggregate) {
-            await ds.collapseNode(dimId, { [dimId]: memberId })
+      const dbg = this._hierarchyDebug || (this._hierarchyDebug = {})
+      dbg.lastError = ''
+      const tryCall = async (name, selector) => {
+        if (!ds || typeof ds[name] !== 'function') {
+          if (name === 'expandNode') {
+            dbg.expandNodeAvailable = false
           }
-          set.delete(key)
-        } else if (isAggregate) {
-          // Expanding "(all)" reveals the first drill level (Year); reuse the
-          // existing dimension-wide hierarchy level call for the root node.
-          await this._applyHierarchyLevel(dimension, 'year')
-          set.add(key)
-          return
-        } else if (ds && typeof ds.expandNode === 'function') {
-          await ds.expandNode(dimId, { [dimId]: memberId })
-          set.add(key)
-        } else {
-          set.add(key)
+          return false
         }
-      } catch (ignore) {
+        if (name === 'expandNode') {
+          dbg.expandNodeAvailable = true
+        }
+        try {
+          await ds[name](dimId, selector)
+          return true
+        } catch (err) {
+          dbg.lastError = String((err && err.message) || err)
+          return false
+        }
+      }
+      let succeeded = false
+      if (isOpen) {
+        if (!isAggregate) {
+          succeeded = await tryCall('collapseNode', { [dimId]: memberId })
+        } else {
+          succeeded = true
+        }
+        set.delete(key)
+      } else if (isAggregate) {
+        const rootCandidates = [{ [dimId]: '#' }, { [dimId]: '(all)' }, {}]
+        for (let i = 0; i < rootCandidates.length && !succeeded; i++) {
+          succeeded = await tryCall('expandNode', rootCandidates[i])
+        }
+        if (!succeeded) {
+          await this._applyHierarchyLevel(dimension, 'year')
+        }
+        set.add(key)
+      } else {
+        succeeded = await tryCall('expandNode', { [dimId]: memberId })
         set.add(key)
       }
+      dbg.lastAction = (isOpen ? 'collapse ' : 'expand ') + dimId + '=' + (memberId || '(all)')
+      dbg.lastSucceeded = succeeded
+      this._hierarchyDiagnostic = dbg.expandNodeAvailable === false
+        ? 'ds.expandNode is not available on this DataSource'
+        : (dbg.lastAction + ' -> ' + (succeeded ? 'call completed' : 'call failed/no-op') + (dbg.lastError ? (' | error: ' + dbg.lastError) : ''))
       this.render()
     }
 
