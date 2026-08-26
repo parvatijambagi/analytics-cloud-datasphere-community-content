@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.19'
+  const WIDGET_VERSION = '1.3.20'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1281,6 +1281,8 @@
         this._bindingFromUpdate = changedProps.dataBinding
       }
       if (changedProps && changedProps.tableType && !isTableTypeEcho(changedProps, this._chosenTableType)) {
+        const wasForecast = isForecastTableType(this._chosenTableType)
+        const nowForecast = isForecastTableType(changedProps.tableType)
         this._chosenTableType = changedProps.tableType
         this._lastTableType = changedProps.tableType
         this.tableType = changedProps.tableType
@@ -1289,6 +1291,10 @@
         this._forecastDateMembers = []
         this._forecastSelectionShape = null
         this._forecastDrillTries = 0
+        this._forecastDrillDone = false
+        if (wasForecast && !nowForecast) {
+          this._restoreDateHierarchyAfterForecast()
+        }
       }
       if (!this._editing) {
         this.render()
@@ -1447,6 +1453,9 @@
       const forecastMode = isForecastTableType(this._resolvedTableType())
       const dateDim = selectorDims.concat(rowDims).find(isDateDim) || dimensions.find(isDateDim) || null
       const versionDim = selectorDims.concat(rowDims).find(isVersionDim) || dimensions.find(isVersionDim) || null
+      if (forecastMode && dateDim) {
+        this._ensureForecastDrill(dateDim, data)
+      }
       let extraVersions = []
       try {
         const parsed = JSON.parse(this.additionalVersionsJson || '[]')
@@ -2515,6 +2524,39 @@
         }
       }
       this.render()
+    }
+
+    _ensureForecastDrill (dateDim, data) {
+      const hasPeriodRows = (data || []).some(row => !isAggregateDateMember(rowCell(row, dateDim)))
+      if (hasPeriodRows) {
+        this._forecastDrillDone = true
+        return
+      }
+      if (this._forecastDrillDone) {
+        return
+      }
+      const tries = this._forecastDrillTries || 0
+      if (tries >= 3) {
+        return
+      }
+      const now = Date.now()
+      if (this._forecastDrillAt && now - this._forecastDrillAt < 3000) {
+        return
+      }
+      this._forecastDrillAt = now
+      this._forecastDrillTries = tries + 1
+      this._forecastDrillDone = true
+      this._applyHierarchyLevel(dateDim, 'month')
+    }
+
+    _restoreDateHierarchyAfterForecast () {
+      const binding = this._resolveDataBinding()
+      const dimensions = parseMetadata(binding && binding.metadata).dimensions
+      const dateDim = (dimensions || []).find(isDateDim)
+      if (!dateDim) {
+        return
+      }
+      this._applyHierarchyLevel(dateDim, 'all')
     }
 
     async _applyDimensionFilter (dimension, memberId) {
