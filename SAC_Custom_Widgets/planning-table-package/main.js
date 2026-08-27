@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.33'
+  const WIDGET_VERSION = '1.3.34'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -844,48 +844,83 @@
     return fiscalYearOf(a) === fiscalYearOf(b) && fiscalPeriodOf(a) === fiscalPeriodOf(b)
   }
 
+  // Finds the parent by walking backwards through the list for the nearest
+  // preceding member exactly one level shallower. Used whenever a member's
+  // own id/label does not carry enough date information to resolve its
+  // parent by fiscal year/quarter (e.g. a bare "Q1" with no year), relying
+  // instead on the hierarchical order SAC returns members in (parent
+  // immediately followed by its own children).
+  const dateAncestorKeyByPosition = (member, allMembers) => {
+    const depth = memberHierarchyDepth(member)
+    const list = allMembers || []
+    const index = list.indexOf(member)
+    if (index < 0) {
+      return null
+    }
+    for (let i = index - 1; i >= 0; i--) {
+      const candidateDepth = memberHierarchyDepth(list[i])
+      if (candidateDepth === depth - 1) {
+        return String(list[i].id || list[i].label)
+      }
+      if (candidateDepth >= 0 && candidateDepth < depth - 1) {
+        break
+      }
+    }
+    return null
+  }
+
   const dateAncestorKey = (member, allMembers) => {
     const depth = memberHierarchyDepth(member)
     if (depth <= 0) {
       return null
     }
-    const date = memberDate(member)
-    if (!date) {
-      return null
-    }
-    const fy = fiscalYearOf(date)
     if (depth === 1) {
       return '(all)'
     }
-    if (depth === 2) {
-      const match = (allMembers || []).find(item => {
-        if (memberHierarchyDepth(item) !== 1) {
-          return false
+    const date = memberDate(member)
+    if (date) {
+      const fy = fiscalYearOf(date)
+      if (depth === 2) {
+        const match = (allMembers || []).find(item => {
+          if (memberHierarchyDepth(item) !== 1) {
+            return false
+          }
+          const d = memberDate(item)
+          return d && fiscalYearOf(d) === fy
+        })
+        if (match) {
+          return String(match.id || match.label)
         }
-        const d = memberDate(item)
-        return d && fiscalYearOf(d) === fy
-      })
-      return match ? String(match.id || match.label) : String(fy)
-    }
-    const quarter = Math.ceil(fiscalPeriodOf(date) / 3)
-    const quarterMembers = (allMembers || []).filter(item => memberHierarchyDepth(item) === 2)
-    if (quarterMembers.length) {
-      const match = quarterMembers.find(item => {
-        const d = memberDate(item)
-        return d && fiscalYearOf(d) === fy && Math.ceil(fiscalPeriodOf(d) / 3) === quarter
-      })
-      return match ? String(match.id || match.label) : (fy + '-Q' + quarter)
-    }
-    // This hierarchy has no Quarter level at all (e.g. "Fiscal Year, Period"),
-    // so a Period's parent is the Year directly.
-    const yearMatch = (allMembers || []).find(item => {
-      if (memberHierarchyDepth(item) !== 1) {
-        return false
+      } else {
+        const quarter = Math.ceil(fiscalPeriodOf(date) / 3)
+        const quarterMembers = (allMembers || []).filter(item => memberHierarchyDepth(item) === 2)
+        if (quarterMembers.length) {
+          const match = quarterMembers.find(item => {
+            const d = memberDate(item)
+            return d && fiscalYearOf(d) === fy && Math.ceil(fiscalPeriodOf(d) / 3) === quarter
+          })
+          if (match) {
+            return String(match.id || match.label)
+          }
+        } else {
+          // This hierarchy has no Quarter level at all (e.g. "Fiscal Year,
+          // Period"), so a Period's parent is the Year directly.
+          const yearMatch = (allMembers || []).find(item => {
+            if (memberHierarchyDepth(item) !== 1) {
+              return false
+            }
+            const d = memberDate(item)
+            return d && fiscalYearOf(d) === fy
+          })
+          if (yearMatch) {
+            return String(yearMatch.id || yearMatch.label)
+          }
+        }
       }
-      const d = memberDate(item)
-      return d && fiscalYearOf(d) === fy
-    })
-    return yearMatch ? String(yearMatch.id || yearMatch.label) : String(fy)
+    }
+    // Date-based matching could not resolve a parent (e.g. a bare "Q1"/"P01"
+    // label with no year anywhere in it) -- fall back to list position.
+    return dateAncestorKeyByPosition(member, allMembers) || (date ? String(fiscalYearOf(date)) : null)
   }
 
   // Members start collapsed to the shallowest level (usually "(all)").

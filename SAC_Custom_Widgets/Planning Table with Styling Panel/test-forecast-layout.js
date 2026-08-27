@@ -264,4 +264,43 @@ if (!sameIds(twoLevelExpanded, ['(all)', '2026', 'P01 (2026)', 'P02 (2026)'])) {
   throw new Error('Fiscal Year, Period (no Quarter) should reveal periods directly when the year is expanded, got ' + twoLevelExpanded.map(m => m.id).join(','))
 }
 
+// Real member labels sometimes carry no year at all ("Q1", not "Q1 (2025)"),
+// so memberDate() cannot resolve a fiscal year/quarter for them. The parent
+// must then be inferred from list order: SAC returns parent immediately
+// followed by its own children.
+const bareLabelMembers = [
+  { id: '(all)', label: '(all)' },
+  { id: '2025', label: '2025' },
+  { id: 'Q1', label: 'Q1' },
+  { id: 'Q2', label: 'Q2' },
+  { id: 'Q3', label: 'Q3' },
+  { id: 'Q4', label: 'Q4' },
+  { id: '2026', label: '2026' },
+  { id: 'Q1', label: 'Q1' },
+  { id: 'Q2', label: 'Q2' },
+  { id: 'Q3', label: 'Q3' },
+  { id: 'Q4', label: 'Q4' }
+]
+if (api.dateAncestorKey(bareLabelMembers[2], bareLabelMembers) !== '2025') {
+  throw new Error('The first bare "Q1" should attach to the preceding 2025, not (all)')
+}
+if (api.dateAncestorKey(bareLabelMembers[7], bareLabelMembers) !== '2026') {
+  throw new Error('The second bare "Q1" (after 2026) should attach to 2026, not 2025 or (all)')
+}
+const rootOnlyBareLabels = api.filterDateMembersForDisplay(bareLabelMembers, new Set())
+if (!sameIds(rootOnlyBareLabels, ['(all)'])) {
+  throw new Error('Bare-label quarters must not leak into view before (all) is expanded, got ' + rootOnlyBareLabels.map(m => m.id).join(','))
+}
+const rootExpandedBareLabels = api.filterDateMembersForDisplay(bareLabelMembers, new Set(['(all)']))
+if (!sameIds(rootExpandedBareLabels, ['(all)', '2025', '2026'])) {
+  throw new Error('Expanding (all) must reveal only the years, not every bare-label quarter at once, got ' + rootExpandedBareLabels.map(m => m.id).join(','))
+}
+const year2025ExpandedBareLabels = api.filterDateMembersForDisplay(bareLabelMembers, new Set(['(all)', '2025']))
+if (year2025ExpandedBareLabels.length !== 7) {
+  throw new Error('Expanding 2025 should reveal exactly its own 4 quarters (plus (all)/2025/2026), got ' + year2025ExpandedBareLabels.map(m => m.id).join(','))
+}
+if (year2025ExpandedBareLabels.indexOf(bareLabelMembers[2]) === -1 || year2025ExpandedBareLabels.indexOf(bareLabelMembers[7]) !== -1) {
+  throw new Error("Expanding 2025 must reveal its own Q1 instance, not 2026's Q1 instance")
+}
+
 console.log('forecast layout tests passed')
