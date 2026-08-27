@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.35'
+  const WIDGET_VERSION = '1.3.36'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1713,6 +1713,10 @@
             if (!this._expandedNodes[dimension.key]) {
               this._expandedNodes[dimension.key] = new Set()
             }
+            if (!this._dateRawMembers) {
+              this._dateRawMembers = {}
+            }
+            this._dateRawMembers[dimension.key] = members
             members = filterDateMembersForDisplay(members, this._expandedNodes[dimension.key])
           }
           const tokens = members.length ? members : [{ id: '', label: '(all)' }]
@@ -2986,18 +2990,28 @@
       // disappears. expandNode/collapseNode are still attempted best-effort
       // in case this environment ever adds real support, but their result no
       // longer blocks the visible expand/collapse.
-      if (isOpenNow) {
-        set.delete(key)
-        if (!isAggregate) {
-          tryCall('collapseNode', { [dimId]: memberId })
+      if (isAggregate) {
+        // The root's own arrow is an "expand all / collapse all" shortcut:
+        // every other node still expands/collapses one level at a time.
+        if (isOpenNow) {
+          this._expandedNodes[dimension.key] = new Set()
+        } else {
+          const rawMembers = (this._dateRawMembers && this._dateRawMembers[dimension.key]) || []
+          const nextSet = new Set(['(all)'])
+          rawMembers.forEach(item => {
+            if (item && (item.id || item.label) && !isAllMember(item)) {
+              nextSet.add(String(item.id || item.label))
+            }
+          })
+          this._expandedNodes[dimension.key] = nextSet
         }
+        tryCall(isOpenNow ? 'collapseNode' : 'expandNode', { [dimId]: '#' })
+      } else if (isOpenNow) {
+        set.delete(key)
+        tryCall('collapseNode', { [dimId]: memberId })
       } else {
         set.add(key)
-        if (isAggregate) {
-          tryCall('expandNode', { [dimId]: '#' })
-        } else {
-          tryCall('expandNode', { [dimId]: memberId })
-        }
+        tryCall('expandNode', { [dimId]: memberId })
       }
       this._hierarchyDiagnostic = ''
       this.render()
