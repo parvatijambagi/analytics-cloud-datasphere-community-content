@@ -189,9 +189,12 @@
           </div>
           <h3>Layout</h3>
           <label for="lookBackOn">Look Back On:</label>
-          <select id="lookBackOn"></select>
+          <input id="lookBackOn" type="text" list="lookBackOnList" placeholder="Type or pick a version ID" />
+          <datalist id="lookBackOnList"></datalist>
           <label for="lookAheadOn">Look Ahead On:</label>
-          <select id="lookAheadOn"></select>
+          <input id="lookAheadOn" type="text" list="lookAheadOnList" placeholder="Type or pick a version ID" />
+          <datalist id="lookAheadOnList"></datalist>
+          <p class="hint">If a version does not appear in the list, type its technical ID directly.</p>
           <label for="cutOverMode">Cut-Over Date:</label>
           <select id="cutOverMode">
             <option value="Today">Today</option>
@@ -632,6 +635,24 @@
       })
     }
 
+    _fillDatalistOptions (datalist, items) {
+      if (!datalist) {
+        return
+      }
+      datalist.innerHTML = ''
+      const seen = new Set()
+      ;(items || []).forEach(item => {
+        if (!item || !item.id || seen.has(item.id)) {
+          return
+        }
+        seen.add(item.id)
+        const opt = document.createElement('option')
+        opt.value = item.id
+        opt.label = item.name || item.id
+        datalist.appendChild(opt)
+      })
+    }
+
     _renderExtra () {
       const host = this._shadowRoot.getElementById('extra-versions')
       if (!host) {
@@ -818,8 +839,16 @@
     }
 
     _refreshForecastSelects () {
-      this._fillMemberSelect(this._shadowRoot.getElementById('lookBackOn'), this._versions, this.lookBackOn || this._val('lookBackOn') || 'Actual')
-      this._fillMemberSelect(this._shadowRoot.getElementById('lookAheadOn'), this._versions, this.lookAheadOn || this._val('lookAheadOn') || 'EPMplusA')
+      this._fillDatalistOptions(this._shadowRoot.getElementById('lookBackOnList'), this._versions)
+      this._fillDatalistOptions(this._shadowRoot.getElementById('lookAheadOnList'), this._versions)
+      const lookBackInput = this._shadowRoot.getElementById('lookBackOn')
+      if (lookBackInput && !lookBackInput.value) {
+        lookBackInput.value = this.lookBackOn || 'Actual'
+      }
+      const lookAheadInput = this._shadowRoot.getElementById('lookAheadOn')
+      if (lookAheadInput && !lookAheadInput.value) {
+        lookAheadInput.value = this.lookAheadOn || 'EPMplusA'
+      }
       this._fillMemberSelect(this._shadowRoot.getElementById('specificDate'), this._dates, this.cutOverDate || this._val('specificDate'))
       this._renderExtra()
       this._syncCutOverUi()

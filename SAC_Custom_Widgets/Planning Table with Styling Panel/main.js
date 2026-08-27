@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.37'
+  const WIDGET_VERSION = '1.3.38'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1638,6 +1638,14 @@
           dateMembers: allDates.concat(this._forecastDateMembers || []),
           actualToken: lookBackId
         })
+        this._lastCutoverInfo = {
+          cutoverText: cutover instanceof Date && !Number.isNaN(cutover.getTime())
+            ? (cutover.toDateString() + ' (FY' + fiscalYearOf(cutover) + ' P' + String(fiscalPeriodOf(cutover)).padStart(2, '0') + ')')
+            : String(cutover),
+          fromCache: !!(/last booked/i.test(String(cutMode)) && cachedBooked),
+          lookBackId,
+          lookAheadId
+        }
         this._forecastQuery = {
           dateDim,
           versionDim,
@@ -2131,8 +2139,11 @@
       const hierarchyHtml = this._hierarchyDiagnostic
         ? `<div class="hierarchy-diagnostic" style="margin-bottom:6px;padding:6px 8px;font-size:11px;font-weight:600;color:#0b5c2d;background:#e9f7ef;border:2px solid #6fcf97">Drill diagnostic: ${this._escape(this._hierarchyDiagnostic)}</div>`
         : ''
+      const cutoverHtml = (forecastMode && this._lastCutoverInfo)
+        ? `<div class="cutover-diagnostic" style="margin-bottom:6px;padding:4px 8px;font-size:11px;color:#556b82;background:#f5f6f7;border:1px solid #d9d9d9">Cut-over resolved to ${this._escape(this._lastCutoverInfo.cutoverText)}${this._lastCutoverInfo.fromCache ? ' (cached)' : ''} | Look Back: ${this._escape(this._lastCutoverInfo.lookBackId)} | Look Ahead: ${this._escape(this._lastCutoverInfo.lookAheadId)}</div>`
+        : ''
 
-      this._tableWrap.innerHTML = hierarchyHtml + diagnosticHtml + table
+      this._tableWrap.innerHTML = hierarchyHtml + diagnosticHtml + cutoverHtml + table
       this._tableWrap.querySelectorAll('thead tr.axis th.measure').forEach(cell => {
         cell.style.background = headerBg
         cell.style.color = headerFg
