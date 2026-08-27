@@ -1,4 +1,4 @@
-# How to download the Planning Table widget (v1.3.31)
+# How to download the Planning Table widget (v1.3.32)
 
 Do **not** use branch URLs that contain `cursor/stacked-column-headers-abca`.
 GitHub and many browsers treat `cursor` as the branch name and then look for a file
@@ -6,27 +6,33 @@ GitHub and many browsers treat `cursor` as the branch name and then look for a f
 
 Use **commit** links below (no slash in the ref). Right-click → **Save link as**.
 
-Pinned commit: `ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba`
+Pinned commit: `9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6`
 
 ## Files for SAC Custom Widgets
 
 1. Widget JSON  
-   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba/PlanningTable.json
+   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6/PlanningTable.json
 
 2. Resource ZIP (`main-v13.js` + `styling-v13.js` at the zip root)  
-   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba/PlanningTable-resources.zip
+   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6/PlanningTable-resources.zip
 
 jsDelivr mirrors (same commit):
 
-- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba/PlanningTable.json
-- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba/PlanningTable-resources.zip
+- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6/PlanningTable.json
+- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6/PlanningTable-resources.zip
+
+## If GitHub/jsDelivr are blocked on your network
+
+The same files are also attached directly in the chat as artifacts:
+`PlanningTable_v1332.json` and `PlanningTable_v1332_resources.zip` (plus the
+individual `main-v13_v1332.js` / `styling-v13_v1332.js` sources).
 
 ## If the ZIP still will not save
 
 Download these two text files, then zip them **at the zip root** (no folder):
 
-- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba/main-v13.js
-- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba/styling-v13.js
+- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6/main-v13.js
+- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6/styling-v13.js
 
 ```bash
 zip PlanningTable-resources.zip main-v13.js styling-v13.js
@@ -34,7 +40,7 @@ zip PlanningTable-resources.zip main-v13.js styling-v13.js
 
 ## Whole-repo archive (always works on GitHub)
 
-https://github.com/parvatijambagi/analytics-cloud-datasphere-community-content/archive/ef0673a11a4e65ad7fd5c4de9a245a068d90d7ba.zip
+https://github.com/parvatijambagi/analytics-cloud-datasphere-community-content/archive/9c6d05f0e2d8d2db26a5af0b99a4b90cc5943fd6.zip
 
 Then take `PlanningTable.json` and `PlanningTable-resources.zip` from the extracted folder.
 
@@ -44,4 +50,4 @@ In SAC go to **Custom Widgets** → **Add** → upload **JSON and ZIP as files f
 Do not paste a GitHub URL into SAC. The JSON uses `/main-v13.js` and `/styling-v13.js`,
 which SAC resolves from the ZIP. Uploading JSON alone causes a **404** for those scripts.
 
-Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.31**.
+Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.32**.
