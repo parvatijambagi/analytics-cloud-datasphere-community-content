@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.38'
+  const WIDGET_VERSION = '1.3.39'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1949,6 +1949,27 @@
         this._ensureForecastCells(rowTuples)
       }
 
+      // Independent of the getData-based cache: directly count how many
+      // rows already in the bound `view` array look like real, non-aggregate
+      // Date rows for the Look Back version. If this is 0, no matching or
+      // fetching strategy can ever fill Forecast cells -- the bound data
+      // itself has no period-level rows to read from.
+      let realActualRowCount = 0
+      let realActualRowCountForFirstRow = 0
+      if (forecastMode && dateDim && versionDim) {
+        const lookBackToken = (this._forecastQuery && this._forecastQuery.lookBackId) || this.lookBackOn || 'Actual'
+        const realActualRows = view.filter(item => {
+          const dCell = rowCell(item, dateDim)
+          const vCell = rowCell(item, versionDim)
+          return !isAggregateDateMember(dCell) && versionMatches(vCell, lookBackToken)
+        })
+        realActualRowCount = realActualRows.length
+        if (rowTuples.length) {
+          const probeKey = rowKey(rowTuples[0], rowDims)
+          realActualRowCountForFirstRow = realActualRows.filter(item => rowKey(item, rowDims) === probeKey).length
+        }
+      }
+
       const findBound = (row, column) => {
         if (forecastMode && this._forecastCache && this._forecastCache.cells) {
           const cached = this._forecastCache.cells[this._forecastCellKey(row, rowDims, column)]
@@ -2130,8 +2151,12 @@
       table += '</table>'
 
       const cache = this._forecastCache
-      const forecastDiagnostic = forecastMode && cache && !cache.loading && forecastFilledCount === 0
-        ? (cache.diagnostic || this._buildForecastDiagnostic(this._debug()))
+      const forecastDiagnostic = forecastMode && forecastFilledCount === 0
+        ? ('real bound period rows for Look Back version: ' + realActualRowCount +
+          ' (matching first row: ' + realActualRowCountForFirstRow + ') | ' +
+          (cache
+            ? (cache.loading ? 'still fetching additional cells…' : (cache.diagnostic || this._buildForecastDiagnostic(this._debug())))
+            : 'no fetch cache yet'))
         : ''
       const diagnosticHtml = forecastDiagnostic
         ? `<div class="forecast-diagnostic" style="margin-bottom:6px;padding:6px 8px;font-size:11px;font-weight:600;color:#8a3b00;background:#fff4e5;border:2px solid #f0b429">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
