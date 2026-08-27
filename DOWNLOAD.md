@@ -1,4 +1,4 @@
-# How to download the Planning Table widget (v1.3.38)
+# How to download the Planning Table widget (v1.3.39)
 
 Do **not** use branch URLs that contain `cursor/stacked-column-headers-abca`.
 GitHub and many browsers treat `cursor` as the branch name and then look for a file
@@ -6,33 +6,33 @@ GitHub and many browsers treat `cursor` as the branch name and then look for a f
 
 Use **commit** links below (no slash in the ref). Right-click → **Save link as**.
 
-Pinned commit: `dfbad8ae2a4fe37da6746279540ff28c67bd9cfd`
+Pinned commit: `e6e297b4e4d207dbda224bf7384698d7ef026b59`
 
 ## Files for SAC Custom Widgets
 
 1. Widget JSON  
-   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/dfbad8ae2a4fe37da6746279540ff28c67bd9cfd/PlanningTable.json
+   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/e6e297b4e4d207dbda224bf7384698d7ef026b59/PlanningTable.json
 
 2. Resource ZIP (`main-v13.js` + `styling-v13.js` at the zip root)  
-   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/dfbad8ae2a4fe37da6746279540ff28c67bd9cfd/PlanningTable-resources.zip
+   https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/e6e297b4e4d207dbda224bf7384698d7ef026b59/PlanningTable-resources.zip
 
 jsDelivr mirrors (same commit):
 
-- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@dfbad8ae2a4fe37da6746279540ff28c67bd9cfd/PlanningTable.json
-- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@dfbad8ae2a4fe37da6746279540ff28c67bd9cfd/PlanningTable-resources.zip
+- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@e6e297b4e4d207dbda224bf7384698d7ef026b59/PlanningTable.json
+- https://cdn.jsdelivr.net/gh/parvatijambagi/analytics-cloud-datasphere-community-content@e6e297b4e4d207dbda224bf7384698d7ef026b59/PlanningTable-resources.zip
 
 ## If GitHub/jsDelivr are blocked on your network
 
 The same files are also attached directly in the chat as artifacts:
-`PlanningTable_v1338.json` and `PlanningTable_v1338_resources.zip` (plus the
-individual `main-v13_v1338.js` / `styling-v13_v1338.js` sources).
+`PlanningTable_v1339.json` and `PlanningTable_v1339_resources.zip` (plus the
+individual `main-v13_v1339.js` / `styling-v13_v1339.js` sources).
 
 ## If the ZIP still will not save
 
 Download these two text files, then zip them **at the zip root** (no folder):
 
-- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/dfbad8ae2a4fe37da6746279540ff28c67bd9cfd/main-v13.js
-- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/dfbad8ae2a4fe37da6746279540ff28c67bd9cfd/styling-v13.js
+- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/e6e297b4e4d207dbda224bf7384698d7ef026b59/main-v13.js
+- https://raw.githubusercontent.com/parvatijambagi/analytics-cloud-datasphere-community-content/e6e297b4e4d207dbda224bf7384698d7ef026b59/styling-v13.js
 
 ```bash
 zip PlanningTable-resources.zip main-v13.js styling-v13.js
@@ -40,7 +40,7 @@ zip PlanningTable-resources.zip main-v13.js styling-v13.js
 
 ## Whole-repo archive (always works on GitHub)
 
-https://github.com/parvatijambagi/analytics-cloud-datasphere-community-content/archive/dfbad8ae2a4fe37da6746279540ff28c67bd9cfd.zip
+https://github.com/parvatijambagi/analytics-cloud-datasphere-community-content/archive/e6e297b4e4d207dbda224bf7384698d7ef026b59.zip
 
 Then take `PlanningTable.json` and `PlanningTable-resources.zip` from the extracted folder.
 
@@ -50,4 +50,4 @@ In SAC go to **Custom Widgets** → **Add** → upload **JSON and ZIP as files f
 Do not paste a GitHub URL into SAC. The JSON uses `/main-v13.js` and `/styling-v13.js`,
 which SAC resolves from the ZIP. Uploading JSON alone causes a **404** for those scripts.
 
-Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.38**.
+Delete any older **Planning Table** widget first. After install the toolbar must show **v1.3.39**.
