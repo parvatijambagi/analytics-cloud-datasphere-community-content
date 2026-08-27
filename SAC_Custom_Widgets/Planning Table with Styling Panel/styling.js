@@ -776,19 +776,44 @@
       return Array.from(seen.values())
     }
 
-    _loadMembersFromDataSource (dimensionId) {
+    async _loadMembersFromDataSource (dimensionId) {
       try {
         const getBinding = this.dataBindings && this.dataBindings.getDataBinding
         const binding = getBinding ? this.dataBindings.getDataBinding('dataBinding') : null
         const ds = binding && binding.getDataSource && binding.getDataSource()
         if (!ds || typeof ds.getMembers !== 'function') {
-          return Promise.resolve([])
+          return []
         }
-        return Promise.resolve(ds.getMembers(dimensionId)).then(members => {
-          return (members || []).map(item => this._normalizeMember(item)).filter(Boolean)
-        }).catch(() => [])
+        // A single getMembers(dimensionId) call sometimes returns an empty
+        // or truncated list depending on the data source; try the same
+        // broader set of call shapes the main widget already relies on for
+        // Date so Version (and any other dimension) gets its full catalog.
+        const calls = [
+          [dimensionId, 5000],
+          [dimensionId, 10000],
+          [dimensionId],
+          [dimensionId, { limit: 5000 }],
+          [dimensionId, { maxNumber: 5000 }]
+        ]
+        const seen = new Map()
+        for (let i = 0; i < calls.length; i++) {
+          try {
+            const result = await ds.getMembers.apply(ds, calls[i])
+            const list = Array.isArray(result) ? result : ((result && result.members) || [])
+            list.forEach(item => {
+              const normalized = this._normalizeMember(item)
+              if (normalized && !seen.has(normalized.id)) {
+                seen.set(normalized.id, normalized)
+              }
+            })
+            if (seen.size) {
+              break
+            }
+          } catch (ignore) {}
+        }
+        return Array.from(seen.values())
       } catch (ignore) {
-        return Promise.resolve([])
+        return []
       }
     }
 

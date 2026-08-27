@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.36'
+  const WIDGET_VERSION = '1.3.37'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -2126,7 +2126,7 @@
         ? (cache.diagnostic || this._buildForecastDiagnostic(this._debug()))
         : ''
       const diagnosticHtml = forecastDiagnostic
-        ? `<div class="forecast-diagnostic" style="position:sticky;top:0;z-index:5;margin-bottom:6px;padding:6px 8px;font-size:11px;color:#8a3b00;background:#fff4e5;border:1px solid #f0b429">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
+        ? `<div class="forecast-diagnostic" style="margin-bottom:6px;padding:6px 8px;font-size:11px;font-weight:600;color:#8a3b00;background:#fff4e5;border:2px solid #f0b429">No Forecast values yet. Diagnostic: ${this._escape(forecastDiagnostic)}</div>`
         : ''
       const hierarchyHtml = this._hierarchyDiagnostic
         ? `<div class="hierarchy-diagnostic" style="margin-bottom:6px;padding:6px 8px;font-size:11px;font-weight:600;color:#0b5c2d;background:#e9f7ef;border:2px solid #6fcf97">Drill diagnostic: ${this._escape(this._hierarchyDiagnostic)}</div>`
