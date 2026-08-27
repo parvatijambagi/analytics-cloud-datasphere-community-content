@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.34'
+  const WIDGET_VERSION = '1.3.35'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1848,7 +1848,13 @@
             }
             span += 1
           }
-          const isAggregate = isAllMember(token) || isAggregateDateMember(token)
+          // isAggregateDateMember() answers "is this NOT a specific booked
+          // period" (used elsewhere for Forecast cut-over logic), which is
+          // true for a bare Year member too -- it must NOT be used here to
+          // decide whether a node IS the "(all)" root, or every Year's arrow
+          // would incorrectly toggle the same root expand/collapse state
+          // instead of its own.
+          const isAggregate = isAllMember(token)
           const hasChildrenHint = token.isNode != null ? !!token.isNode : (token.hasChildren != null ? !!token.hasChildren : false)
           const canExpand = !isVersionDim(dimension) && (
             isDateDim(dimension) ? (isAggregate || memberHierarchyDepth(token) < 3) : hasChildrenHint
