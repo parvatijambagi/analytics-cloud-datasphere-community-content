@@ -229,21 +229,39 @@ const sameIds = (list, expected) => {
   return a.length === b.length && a.every((v, i) => v === b[i])
 }
 
-const fullyExpanded = api.filterDateMembersForDisplay(hierMembers, new Set())
-if (!sameIds(fullyExpanded, hierMembers.map(m => m.id))) {
-  throw new Error('With nothing collapsed, every level should show by default, got ' + fullyExpanded.map(m => m.id).join(','))
+const nothingExpanded = api.filterDateMembersForDisplay(hierMembers, new Set())
+if (!sameIds(nothingExpanded, ['(all)'])) {
+  throw new Error('With nothing expanded, only (all) should show by default, got ' + nothingExpanded.map(m => m.id).join(','))
 }
-const yearCollapsed = api.filterDateMembersForDisplay(hierMembers, new Set(['2026']))
-if (!sameIds(yearCollapsed, ['(all)', '2025', '2026'])) {
-  throw new Error('Collapsing 2026 should hide only its own quarters/periods, not 2025 or (all), got ' + yearCollapsed.map(m => m.id).join(','))
+const rootExpanded = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)']))
+if (!sameIds(rootExpanded, ['(all)', '2025', '2026'])) {
+  throw new Error('Expanding (all) should reveal the years alongside (all) itself, got ' + rootExpanded.map(m => m.id).join(','))
 }
-const quarterCollapsed = api.filterDateMembersForDisplay(hierMembers, new Set(['Q1 (2026)']))
-if (!sameIds(quarterCollapsed, ['(all)', '2025', '2026', 'Q1 (2026)', 'Q2 (2026)', 'P04 (2026)'])) {
-  throw new Error('Collapsing Q1 (2026) should hide only its own periods, got ' + quarterCollapsed.map(m => m.id).join(','))
+const yearExpanded = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)', '2026']))
+if (!sameIds(yearExpanded, ['(all)', '2025', '2026', 'Q1 (2026)', 'Q2 (2026)'])) {
+  throw new Error('Expanding 2026 should reveal its quarters while 2026 and 2025 stay visible, got ' + yearExpanded.map(m => m.id).join(','))
 }
-const rootCollapsed = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)']))
-if (!sameIds(rootCollapsed, ['(all)'])) {
-  throw new Error('Collapsing (all) should hide every year/quarter/period, got ' + rootCollapsed.map(m => m.id).join(','))
+const quarterExpanded = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)', '2026', 'Q1 (2026)']))
+if (!sameIds(quarterExpanded, ['(all)', '2025', '2026', 'Q1 (2026)', 'Q2 (2026)', 'P01 (2026)', 'P02 (2026)'])) {
+  throw new Error('Expanding Q1 (2026) should reveal its periods while everything else stays visible, got ' + quarterExpanded.map(m => m.id).join(','))
+}
+const collapsedBackDown = api.filterDateMembersForDisplay(hierMembers, new Set(['(all)']))
+if (!sameIds(collapsedBackDown, ['(all)', '2025', '2026'])) {
+  throw new Error('Collapsing 2026 again should hide only its quarters, not (all) or 2025, got ' + collapsedBackDown.map(m => m.id).join(','))
+}
+
+const twoLevelMembers = [
+  { id: '(all)', label: '(all)' },
+  { id: '2026', label: '2026' },
+  { id: 'P01 (2026)', label: 'P01 (2026)' },
+  { id: 'P02 (2026)', label: 'P02 (2026)' }
+]
+if (api.dateAncestorKey({ id: 'P01 (2026)', label: 'P01 (2026)' }, twoLevelMembers) !== '2026') {
+  throw new Error('With no Quarter level in the data, a Period should attach directly to its Year')
+}
+const twoLevelExpanded = api.filterDateMembersForDisplay(twoLevelMembers, new Set(['(all)', '2026']))
+if (!sameIds(twoLevelExpanded, ['(all)', '2026', 'P01 (2026)', 'P02 (2026)'])) {
+  throw new Error('Fiscal Year, Period (no Quarter) should reveal periods directly when the year is expanded, got ' + twoLevelExpanded.map(m => m.id).join(','))
 }
 
 console.log('forecast layout tests passed')

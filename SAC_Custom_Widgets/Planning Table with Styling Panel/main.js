@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.32'
+  const WIDGET_VERSION = '1.3.33'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -868,36 +868,49 @@
       return match ? String(match.id || match.label) : String(fy)
     }
     const quarter = Math.ceil(fiscalPeriodOf(date) / 3)
-    const match = (allMembers || []).find(item => {
-      if (memberHierarchyDepth(item) !== 2) {
+    const quarterMembers = (allMembers || []).filter(item => memberHierarchyDepth(item) === 2)
+    if (quarterMembers.length) {
+      const match = quarterMembers.find(item => {
+        const d = memberDate(item)
+        return d && fiscalYearOf(d) === fy && Math.ceil(fiscalPeriodOf(d) / 3) === quarter
+      })
+      return match ? String(match.id || match.label) : (fy + '-Q' + quarter)
+    }
+    // This hierarchy has no Quarter level at all (e.g. "Fiscal Year, Period"),
+    // so a Period's parent is the Year directly.
+    const yearMatch = (allMembers || []).find(item => {
+      if (memberHierarchyDepth(item) !== 1) {
         return false
       }
       const d = memberDate(item)
-      return d && fiscalYearOf(d) === fy && Math.ceil(fiscalPeriodOf(d) / 3) === quarter
+      return d && fiscalYearOf(d) === fy
     })
-    return match ? String(match.id || match.label) : (fy + '-Q' + quarter)
+    return yearMatch ? String(yearMatch.id || yearMatch.label) : String(fy)
   }
 
-  // Members are shown at full depth by default. collapsedSet holds the keys of
-  // nodes the user has explicitly rolled up; only THEIR descendants are
-  // hidden, and only until the same node is expanded again. Collapsing one
-  // year (or quarter) never touches any sibling or ancestor's own state.
-  const filterDateMembersForDisplay = (members, collapsedSet) => {
+  // Members start collapsed to the shallowest level (usually "(all)").
+  // expandedSet holds the keys of nodes the user has clicked open; opening a
+  // node reveals its immediate children as ADDITIONAL columns alongside it --
+  // the node itself always stays visible once its own ancestor chain is
+  // satisfied, it is never replaced by its children.
+  const filterDateMembersForDisplay = (members, expandedSet) => {
     const list = (members || []).filter(item => item && (item.id || item.label))
     if (!list.length) {
       return list
     }
-    const isCollapsed = key => !!(collapsedSet && collapsedSet.has(key))
+    const isExpanded = key => !!(expandedSet && expandedSet.has(key))
     const findByDepthAndKey = (depth, key) => list.find(item => memberHierarchyDepth(item) === depth && String(item.id || item.label) === key)
+    const depths = list.map(item => memberHierarchyDepth(item)).filter(d => d >= 0)
+    const baseDepth = depths.length ? Math.min.apply(null, depths) : 0
     return list.filter(member => {
       let current = member
       for (let guard = 0; guard < 8; guard++) {
         const depth = memberHierarchyDepth(current)
-        if (depth <= 0) {
+        if (depth <= baseDepth) {
           return true
         }
         const parentKey = dateAncestorKey(current, list) || '(all)'
-        if (isCollapsed(parentKey)) {
+        if (!isExpanded(parentKey)) {
           return false
         }
         const parentMember = findByDepthAndKey(depth - 1, parentKey)
@@ -1356,7 +1369,7 @@
       this._drillLevels = {}
       this._forecastCache = null
       this._chosenTableType = ''
-      this._collapsedNodes = {}
+      this._expandedNodes = {}
     }
 
     onCustomWidgetResize () {
@@ -1659,13 +1672,13 @@
           const level = this._drillLevels[dimension.key] || 'all'
           let members = filterMembersByLevel(membersOf(dimension), level)
           if (isDateDim(dimension)) {
-            if (!this._collapsedNodes) {
-              this._collapsedNodes = {}
+            if (!this._expandedNodes) {
+              this._expandedNodes = {}
             }
-            if (!this._collapsedNodes[dimension.key]) {
-              this._collapsedNodes[dimension.key] = new Set()
+            if (!this._expandedNodes[dimension.key]) {
+              this._expandedNodes[dimension.key] = new Set()
             }
-            members = filterDateMembersForDisplay(members, this._collapsedNodes[dimension.key])
+            members = filterDateMembersForDisplay(members, this._expandedNodes[dimension.key])
           }
           const tokens = members.length ? members : [{ id: '', label: '(all)' }]
           leafColumns = multiplyLeavesByMembers(leafColumns, dimension.key, tokens, isDateDim(dimension))
@@ -1718,21 +1731,21 @@
         const cell = rowCell(row, dim)
         return cell && cell.parentId != null && cell.parentId !== ''
       }))
-      if (!this._collapsedNodes) {
-        this._collapsedNodes = {}
+      if (!this._expandedNodes) {
+        this._expandedNodes = {}
       }
       const hasChildRows = (dim, memberId) => allRowTuples.some(row => {
         const cell = rowCell(row, dim)
         return cell && String(cell.parentId || '') === String(memberId)
       })
-      // Rows are shown at full depth by default; a row is hidden only if one
-      // of its ancestors has been explicitly collapsed by the user.
+      // Rows start collapsed to their root members; a row is shown only once
+      // every ancestor between it and the root has been explicitly expanded.
       const isRowAncestryExpanded = (dim, cell) => {
-        const collapsedSet = this._collapsedNodes[dim.key]
+        const expandedSet = this._expandedNodes[dim.key]
         let currentId = cell && cell.parentId
         const seen = new Set()
         while (currentId && !seen.has(currentId)) {
-          if (collapsedSet && collapsedSet.has(String(currentId))) {
+          if (!expandedSet || !expandedSet.has(String(currentId))) {
             return false
           }
           seen.add(currentId)
@@ -1785,7 +1798,7 @@
         table += axisLabel(
           this._escape(dimName(dimension)) +
           (isDateDim(dimension)
-            ? ''
+            ? '<button type="button" class="chev reset-hierarchy" data-dim="' + this._escape(dimension.key) + '" title="Collapse everything back to (all)">›</button>'
             : '<button type="button" class="chev drill-btn" data-dim="' + this._escape(dimension.key) + '" title="Change hierarchy level">›</button>'),
           'axis-label selector'
         )
@@ -1805,9 +1818,9 @@
           const canExpand = !isVersionDim(dimension) && (
             isDateDim(dimension) ? (isAggregate || memberHierarchyDepth(token) < 3) : hasChildrenHint
           )
-          const collapsed = canExpand && this._isNodeCollapsed(dimension.key, isAggregate ? '(all)' : token.id)
+          const isOpen = canExpand && this._isNodeExpanded(dimension.key, isAggregate ? '(all)' : token.id)
           const toggle = canExpand
-            ? `<button type="button" class="node-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(isAggregate ? '' : (token.id || ''))}" data-aggregate="${isAggregate ? '1' : '0'}" title="${collapsed ? 'Expand' : 'Collapse'}">›</button>`
+            ? `<button type="button" class="node-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(isAggregate ? '' : (token.id || ''))}" data-aggregate="${isAggregate ? '1' : '0'}" title="${isOpen ? 'Collapse' : 'Expand'}">${isOpen ? 'ˇ' : '›'}</button>`
             : ''
           table += `<td class="selector" colspan="${span}"><span class="member-link">${this._escape(token.label || token.id || '(all)')}</span>${toggle}</td>`
           index += span
@@ -2013,9 +2026,9 @@
             ? hasChildRows(dimension, cell.id)
             : (cell.isNode != null ? !!cell.isNode : (cell.hasChildren != null ? !!cell.hasChildren : false))
           const canExpandRow = !!cell.id && !isAllMember(cell) && hasChildrenHint
-          const collapsedRow = canExpandRow && this._isNodeCollapsed(dimension.key, cell.id)
+          const rowIsOpen = canExpandRow && this._isNodeExpanded(dimension.key, cell.id)
           const rowToggle = canExpandRow
-            ? `<button type="button" class="node-toggle row-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(cell.id)}" data-aggregate="0" title="${collapsedRow ? 'Expand' : 'Collapse'}">›</button>`
+            ? `<button type="button" class="node-toggle row-toggle" data-dim="${this._escape(dimension.key)}" data-member="${this._escape(cell.id)}" data-aggregate="0" title="${rowIsOpen ? 'Collapse' : 'Expand'}">${rowIsOpen ? 'ˇ' : '›'}</button>`
             : (isTreeDim && depth > 0 ? '<span class="row-toggle-spacer"></span>' : '')
           const weight = isTreeDim && depth === 0 ? 'font-weight:700;' : ''
           table += `<td class="dim" title="${this._escape(cell.id || '')}" style="${ruleStyle(dimRule, cellChrome + ';text-align:' + hAlign + ';' + indentStyle + weight)}">${rowToggle}${this._escape(cell.label || '')}</td>`
@@ -2735,6 +2748,17 @@
     _bindDrillMenus (dimensions) {
       const host = this._tableWrap
       host.querySelectorAll('.drill-menu').forEach(menu => menu.remove())
+      host.querySelectorAll('button.reset-hierarchy').forEach(btn => {
+        btn.addEventListener('click', event => {
+          event.preventDefault()
+          event.stopPropagation()
+          const dimKey = btn.getAttribute('data-dim')
+          const dimension = (dimensions || []).find(item => item.key === dimKey)
+          if (dimension) {
+            this._collapseHierarchyToRoot(dimension)
+          }
+        })
+      })
       host.querySelectorAll('button.drill-btn').forEach(btn => {
         btn.addEventListener('click', event => {
           event.preventDefault()
@@ -2854,8 +2878,8 @@
       this._applyHierarchyLevel(dateDim, 'all')
     }
 
-    _isNodeCollapsed (dimKey, memberId) {
-      const set = this._collapsedNodes && this._collapsedNodes[dimKey]
+    _isNodeExpanded (dimKey, memberId) {
+      const set = this._expandedNodes && this._expandedNodes[dimKey]
       return !!(set && set.has(memberId || '(all)'))
     }
 
@@ -2884,14 +2908,14 @@
       const dimId = dimension.id || dimension.key
       const key = memberId || '(all)'
       try { console.log('[PlanningTable] toggle', dimId, memberId, isAggregate) } catch (ignore) {}
-      if (!this._collapsedNodes) {
-        this._collapsedNodes = {}
+      if (!this._expandedNodes) {
+        this._expandedNodes = {}
       }
-      if (!this._collapsedNodes[dimension.key]) {
-        this._collapsedNodes[dimension.key] = new Set()
+      if (!this._expandedNodes[dimension.key]) {
+        this._expandedNodes[dimension.key] = new Set()
       }
-      const set = this._collapsedNodes[dimension.key]
-      const isCollapsedNow = set.has(key)
+      const set = this._expandedNodes[dimension.key]
+      const isOpenNow = set.has(key)
       const ds = this._getDataSource()
       const dbg = this._hierarchyDebug || (this._hierarchyDebug = {})
       dbg.lastError = ''
@@ -2913,27 +2937,36 @@
           return false
         }
       }
-      // Members/rows are shown at full depth by default. The local collapse
-      // state below is what actually drives the display now: when the
-      // dimension's data (with parent levels included) is already present
-      // in the bound data, no API call is needed at all -- we just show/hide
-      // what we already have. expandNode/collapseNode are still attempted
-      // best-effort in case this environment ever adds real support, but
-      // their result no longer blocks the visible expand/collapse.
-      if (isCollapsedNow) {
+      // Members/rows start collapsed to their root. The local expand state
+      // below is what actually drives the display now: when the dimension's
+      // data (with parent levels included) is already present in the bound
+      // data, no API call is needed at all -- clicking a node just reveals or
+      // hides the children we already have, and the node itself never
+      // disappears. expandNode/collapseNode are still attempted best-effort
+      // in case this environment ever adds real support, but their result no
+      // longer blocks the visible expand/collapse.
+      if (isOpenNow) {
         set.delete(key)
+        if (!isAggregate) {
+          tryCall('collapseNode', { [dimId]: memberId })
+        }
+      } else {
+        set.add(key)
         if (isAggregate) {
           tryCall('expandNode', { [dimId]: '#' })
         } else {
           tryCall('expandNode', { [dimId]: memberId })
         }
-      } else {
-        set.add(key)
-        if (!isAggregate) {
-          tryCall('collapseNode', { [dimId]: memberId })
-        }
       }
       this._hierarchyDiagnostic = ''
+      this.render()
+    }
+
+    _collapseHierarchyToRoot (dimension) {
+      if (!this._expandedNodes) {
+        this._expandedNodes = {}
+      }
+      this._expandedNodes[dimension.key] = new Set()
       this.render()
     }
 
