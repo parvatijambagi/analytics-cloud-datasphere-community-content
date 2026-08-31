@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.44'
+  const WIDGET_VERSION = '1.3.45'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1663,13 +1663,53 @@
           dateMembers: allDates.concat(this._forecastDateMembers || []),
           actualToken: lookBackId
         })
+        // Independent evidence for the cut-over diagnostic: every distinct
+        // real (non-aggregate) period where a Look Back version row has an
+        // actual booked value, not just the single latest one. If this list
+        // stops earlier than expected, the bound data itself -- not the
+        // cut-over calculation -- is missing values for the later periods.
+        const bookedActualPeriods = []
+        if (dateDim && versionDim) {
+          const seenPeriods = new Set()
+          view.forEach(item => {
+            const dCell = rowCell(item, dateDim)
+            const vCell = rowCell(item, versionDim)
+            if (isAggregateDateMember(dCell) || !versionMatches(vCell, lookBackId)) {
+              return
+            }
+            const hasValue = Object.keys(item || {}).some(key => {
+              const cell = item[key]
+              if (!cell || typeof cell !== 'object' || cell.raw == null || cell.raw === '') {
+                return false
+              }
+              const numeric = typeof cell.raw === 'number' ? cell.raw : Number(String(cell.raw).replace(/,/g, ''))
+              return !Number.isNaN(numeric)
+            })
+            if (!hasValue) {
+              return
+            }
+            const d = memberDate(dCell)
+            if (!d) {
+              return
+            }
+            const pKey = fiscalYearOf(d) + '-' + fiscalPeriodOf(d)
+            if (!seenPeriods.has(pKey)) {
+              seenPeriods.add(pKey)
+              bookedActualPeriods.push({ key: pKey, date: d })
+            }
+          })
+          bookedActualPeriods.sort((a, b) => a.date.getTime() - b.date.getTime())
+        }
         this._lastCutoverInfo = {
           cutoverText: cutover instanceof Date && !Number.isNaN(cutover.getTime())
             ? (cutover.toDateString() + ' (FY' + fiscalYearOf(cutover) + ' P' + String(fiscalPeriodOf(cutover)).padStart(2, '0') + ')')
             : String(cutover),
           fromCache: !!(/last booked/i.test(String(cutMode)) && cachedBooked),
           lookBackId,
-          lookAheadId
+          lookAheadId,
+          bookedPeriodsText: bookedActualPeriods.length
+            ? (bookedActualPeriods.length + ' booked period(s) found: ' + bookedActualPeriods.map(p => 'P' + String(fiscalPeriodOf(p.date)).padStart(2, '0') + ' (FY' + fiscalYearOf(p.date) + ')').join(', '))
+            : '0 booked periods found for Look Back version ' + lookBackId
         }
         this._forecastQuery = {
           dateDim,
@@ -2218,7 +2258,7 @@
         ? `<div class="hierarchy-diagnostic" style="margin-bottom:6px;padding:6px 8px;font-size:11px;font-weight:600;color:#0b5c2d;background:#e9f7ef;border:2px solid #6fcf97">Drill diagnostic: ${this._escape(this._hierarchyDiagnostic)}</div>`
         : ''
       const cutoverHtml = (forecastMode && this._lastCutoverInfo)
-        ? `<div class="cutover-diagnostic" style="margin-bottom:6px;padding:4px 8px;font-size:11px;color:#556b82;background:#f5f6f7;border:1px solid #d9d9d9">Cut-over resolved to ${this._escape(this._lastCutoverInfo.cutoverText)}${this._lastCutoverInfo.fromCache ? ' (cached)' : ''} | Look Back: ${this._escape(this._lastCutoverInfo.lookBackId)} | Look Ahead: ${this._escape(this._lastCutoverInfo.lookAheadId)}</div>`
+        ? `<div class="cutover-diagnostic" style="margin-bottom:6px;padding:4px 8px;font-size:11px;color:#556b82;background:#f5f6f7;border:1px solid #d9d9d9">Cut-over resolved to ${this._escape(this._lastCutoverInfo.cutoverText)}${this._lastCutoverInfo.fromCache ? ' (cached)' : ''} | Look Back: ${this._escape(this._lastCutoverInfo.lookBackId)} | Look Ahead: ${this._escape(this._lastCutoverInfo.lookAheadId)} | ${this._escape(this._lastCutoverInfo.bookedPeriodsText || '')}</div>`
         : ''
 
       this._tableWrap.innerHTML = hierarchyHtml + diagnosticHtml + cutoverHtml + table
