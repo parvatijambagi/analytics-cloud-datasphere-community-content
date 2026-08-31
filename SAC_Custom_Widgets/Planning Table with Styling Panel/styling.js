@@ -806,15 +806,15 @@
           return []
         }
         // A single getMembers(dimensionId) call sometimes returns an empty
-        // or truncated list depending on the data source; try the same
-        // broader set of call shapes the main widget already relies on for
-        // Date so Version (and any other dimension) gets its full catalog.
+        // or truncated list depending on the data source. Try a couple of
+        // shapes, but keep this list short: repeated getMembers calls on
+        // the same dimension in quick succession have been observed to
+        // throw a "Cannot create instance, already exists" error from the
+        // shared DataSource, so we stop at the first shape that returns
+        // anything instead of exhausting every possible call signature.
         const calls = [
           [dimensionId, 5000],
-          [dimensionId, 10000],
-          [dimensionId],
-          [dimensionId, { limit: 5000 }],
-          [dimensionId, { maxNumber: 5000 }]
+          [dimensionId]
         ]
         const seen = new Map()
         for (let i = 0; i < calls.length; i++) {
@@ -869,18 +869,17 @@
       this._dates = dateDim ? this._membersFromData(dateDim) : (this._dates || [])
       this._refreshForecastSelects()
       const versionId = versionDim && (versionDim.id || versionDim.key)
-      const dateId = dateDim && (dateDim.id || dateDim.key)
+      // Date members are already discovered thoroughly by the main widget
+      // (it needs the full period/quarter/year hierarchy for Forecast
+      // Layout anyway); querying getMembers for Date here too raced with
+      // that and could trigger a "Cannot create instance, already exists"
+      // error from the shared DataSource. Only Version is fetched here.
       Promise.all([
-        versionId ? this._loadMembersFromDataSource(versionId) : Promise.resolve([]),
-        dateId ? this._loadMembersFromDataSource(dateId) : Promise.resolve([])
+        versionId ? this._loadMembersFromDataSource(versionId) : Promise.resolve([])
       ]).then(results => {
         const versions = results[0]
-        const dates = results[1]
         if (versions && versions.length) {
           this._versions = this._mergeMembers(this._versions, versions)
-        }
-        if (dates && dates.length) {
-          this._dates = this._mergeMembers(this._dates, dates)
         }
         this._refreshForecastSelects()
       })
