@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.40'
+  const WIDGET_VERSION = '1.3.41'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1672,23 +1672,43 @@
         const grain = this.timeframeGranularity || 'Month'
         leafColumns = []
         const axisDates = dateMembers.length ? dateMembers : synthesizeForecastAxis(cutover, forecastSettings)
-        axisDates.forEach(date => {
-          const lookBack = isForecastLookBack(date, cutover)
-          const primaryId = lookBack ? lookBackId : lookAheadId
-          const versionIds = [primaryId].concat(extraVersions).filter((id, index, list) => id && list.indexOf(id) === index)
-          const displayDate = {
-            id: date.id || date.label,
-            label: formatForecastDateLabel(date, memberHierarchyDepth(date) <= 1 ? 'Year' : grain)
+        // Version is the primary (outer) grouping to match native SAC: every
+        // Actual/Look Back date sits together in one block, followed by
+        // every FC/Look Ahead date in the next block, instead of pairing
+        // Actual+FC side by side for every individual date.
+        const versionGroups = [
+          { versionId: lookBackId, lookAhead: false },
+          { versionId: lookAheadId, lookAhead: true }
+        ]
+        extraVersions.forEach(id => {
+          if (id && id !== lookBackId && id !== lookAheadId) {
+            versionGroups.push({ versionId: id, lookAhead: null })
           }
-          ;(versionIds.length ? versionIds : ['']).forEach(versionId => {
+        })
+        versionGroups.forEach(group => {
+          if (!group.versionId) {
+            return
+          }
+          axisDates.forEach(date => {
+            const lookBack = isForecastLookBack(date, cutover)
+            if (group.lookAhead === false && !lookBack) {
+              return
+            }
+            if (group.lookAhead === true && lookBack) {
+              return
+            }
+            const displayDate = {
+              id: date.id || date.label,
+              label: formatForecastDateLabel(date, memberHierarchyDepth(date) <= 1 ? 'Year' : grain)
+            }
             measures.forEach(measure => {
               leafColumns.push({
                 measure,
                 date: displayDate,
-                versionId,
-                versionLabel: versionNameOf(versionMembers, versionId) || versionId || '(all)',
-                lookAhead: !lookBack,
-                key: [displayDate.id, versionId, measure.key].join('|')
+                versionId: group.versionId,
+                versionLabel: versionNameOf(versionMembers, group.versionId) || group.versionId || '(all)',
+                lookAhead: group.lookAhead === null ? !lookBack : group.lookAhead,
+                key: [displayDate.id, group.versionId, measure.key].join('|')
               })
             })
           })

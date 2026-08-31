@@ -30,7 +30,7 @@ The ZIP must keep `main-v13.js` and `styling-v13.js` at the archive root. Those 
 
 If you change the JavaScript, rebuild the ZIP and refresh the SHA-256 `integrity` values in the JSON before uploading again.
 
-**Re-upload JSON + ZIP** (widget version **1.3.40**). The toolbar must show **v1.3.40**. **Builder is native SAC** (same as 1.3.2): Rows, Columns with Measures nested, Filters, and the model dimension/measure lists. A custom Builder was what removed those pickers.
+**Re-upload JSON + ZIP** (widget version **1.3.41**). The toolbar must show **v1.3.41**. **Builder is native SAC** (same as 1.3.2): Rows, Columns with Measures nested, Filters, and the model dimension/measure lists. A custom Builder was what removed those pickers.
 
 SAC custom widgets only have **Builder** and **Styling** tabs. **Table Type** is a tab inside **Styling** (Table Type | Styling). Use it to choose Cross-Tab or Forecast Layout. Do not install a custom Builder panel.
 
