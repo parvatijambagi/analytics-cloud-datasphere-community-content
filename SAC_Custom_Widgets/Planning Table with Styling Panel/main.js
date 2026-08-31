@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.42'
+  const WIDGET_VERSION = '1.3.43'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -547,15 +547,21 @@
       return leaves
     }
     const out = []
-    vals.forEach(member => {
-      const token = { id: member.id || member.label, label: member.label || member.id }
-      leaves.forEach(leaf => {
+    // Existing leaves (e.g. Version, already expanded first) stay the OUTER
+    // grouping and this dimension's members become the INNER one: every
+    // leaf gets its own complete run of these members before moving to the
+    // next leaf. That keeps Version as one continuous block containing all
+    // of its Dates, matching native SAC, instead of interleaving Version
+    // one date at a time (member-major, which was the previous order).
+    leaves.forEach(leaf => {
+      vals.forEach(member => {
+        const token = { id: member.id || member.label, label: member.label || member.id }
         const next = Object.assign({}, leaf, { stack: Object.assign({}, leaf.stack || {}) })
         next.stack[dimKey] = token
         if (asDate) {
           next.date = token
         }
-        next.key = [token.id, leaf.key].join('|')
+        next.key = [leaf.key, token.id].join('|')
         out.push(next)
       })
     })

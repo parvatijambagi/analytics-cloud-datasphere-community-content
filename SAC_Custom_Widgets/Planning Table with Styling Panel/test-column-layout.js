@@ -6,7 +6,7 @@ const end = src.indexOf('  const setupMessage')
 if (start < 0 || end < 0) {
   throw new Error('Could not locate layout helpers in main.js')
 }
-const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, expandVersionLeafColumns, sortVersionMembers, filterMembersByLevel, memberHierarchyDepth }\n')()
+const api = new Function(src.slice(start, end) + '\nreturn { parseMetadata, pickColumnDimensions, pickRowDimensions, expandVersionLeafColumns, sortVersionMembers, filterMembersByLevel, memberHierarchyDepth, multiplyLeavesByMembers }\n')()
 
 const metadata = {
   dimensions: {
@@ -86,6 +86,20 @@ if (!years.some(item => item.id === '2025')) {
 const months = api.filterMembersByLevel(dates, 'month')
 if (!months.some(item => item.id === '2025-01')) {
   throw new Error('Month drill should keep month members')
+}
+
+const stackedDates = [
+  { id: '2025', label: '2025' },
+  { id: '2026', label: '2026' }
+]
+const stacked = api.multiplyLeavesByMembers(leaves, 'dimensions1', stackedDates, true)
+// Version (already expanded first, so it is the existing "leaves") must stay
+// the outer grouping: every Version's own two dates appear together before
+// the next Version starts, matching native SAC's Version-then-Date blocks
+// instead of interleaving Actual/FC for every single date.
+const versionThenDateOrder = stacked.map(item => item.versionLabel + '|' + item.date.id).join(',')
+if (versionThenDateOrder !== 'Actual|2025,Actual|2026,FC|2025,FC|2026,BDG|2025,BDG|2026') {
+  throw new Error('Stacking Date onto Version columns should keep each Version together with all its Dates, got ' + versionThenDateOrder)
 }
 
 console.log('column layout tests passed')
