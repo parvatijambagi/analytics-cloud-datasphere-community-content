@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.43'
+  const WIDGET_VERSION = '1.3.44'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -389,6 +389,22 @@
     return compact(id).indexOf(needle) !== -1 || compact(label).indexOf(needle) !== -1
   }
 
+  // A row can exist for a Date+Version combination (e.g. SAC returns one row
+  // per period in the queried range) without that period actually being
+  // booked yet -- its measure cells are simply empty. "Last Booked" must
+  // mean the latest period with a real, non-empty measure value, not just
+  // the latest period any row happens to exist for.
+  const rowHasBookedValue = row => {
+    return Object.keys(row || {}).some(key => {
+      const cell = row[key]
+      if (!cell || typeof cell !== 'object' || cell.raw == null || cell.raw === '') {
+        return false
+      }
+      const numeric = typeof cell.raw === 'number' ? cell.raw : Number(String(cell.raw).replace(/,/g, ''))
+      return !Number.isNaN(numeric)
+    })
+  }
+
   const lastBookedActualDate = (data, dateDim, versionDim, actualToken) => {
     let best = null
     ;(data || []).forEach(row => {
@@ -408,6 +424,9 @@
       }
       const dateCell = rowCell(row, dateDim)
       if (isAggregateDateMember(dateCell)) {
+        return
+      }
+      if (!rowHasBookedValue(row)) {
         return
       }
       const date = memberDate(dateCell)

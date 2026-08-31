@@ -38,13 +38,27 @@ if (specific.getFullYear() !== 2025 || specific.getMonth() !== 2) {
 const dateDim = { key: 'date' }
 const versionDim = { key: 'version' }
 const data = [
-  { date: { id: 'P01 (2026)', label: 'P01 (2026)' }, version: { id: 'Actual', label: 'Actual' } },
-  { date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' } },
-  { date: { id: 'P12 (2026)', label: 'P12 (2026)' }, version: { id: 'FC', label: 'FC' } }
+  { date: { id: 'P01 (2026)', label: 'P01 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: 100 } },
+  { date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: 200 } },
+  { date: { id: 'P12 (2026)', label: 'P12 (2026)' }, version: { id: 'FC', label: 'FC' }, LC: { raw: 300 } }
 ]
 const last = api.lastBookedActualDate(data, dateDim, versionDim, 'Actual')
 if (!last || last.getFullYear() !== 2026 || last.getMonth() !== 7) {
   throw new Error('Last booked actual should be P11 Aug 2026, got ' + (last && last.toISOString()))
+}
+
+// SAC can return one row per period in the queried range even when a later
+// period is not booked yet -- its measure cells are simply empty. A row
+// existing must not be enough to count as "last booked"; only a row with a
+// real, non-empty measure value should.
+const unbookedTailRows = [
+  { date: { id: 'P10 (2026)', label: 'P10 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: 162297.45 } },
+  { date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: null } },
+  { date: { id: 'P12 (2026)', label: 'P12 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: '' } }
+]
+const lastWithUnbookedTail = api.lastBookedActualDate(unbookedTailRows, dateDim, versionDim, 'Actual')
+if (!lastWithUnbookedTail || lastWithUnbookedTail.getFullYear() !== 2026 || lastWithUnbookedTail.getMonth() !== 6) {
+  throw new Error('P11/P12 rows with no real measure value must not count as booked; last booked should stay P10 Jul 2026, got ' + (lastWithUnbookedTail && lastWithUnbookedTail.toISOString()))
 }
 
 const fyMembers = [
@@ -180,7 +194,7 @@ if (api.forecastPeriodKey({ id: 'P11 (2026)', label: 'P11 (2026)' }) !== 'P2026-
 
 const altDateDim = { key: 'dimensions1', id: 'Date' }
 const altRows = [
-  { Date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' } }
+  { Date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: 50 } }
 ]
 const lastFromId = api.lastBookedActualDate(altRows, altDateDim, versionDim, 'Actual')
 if (!lastFromId || lastFromId.getFullYear() !== 2026 || lastFromId.getMonth() !== 7) {
