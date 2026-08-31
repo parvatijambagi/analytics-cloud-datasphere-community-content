@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.45'
+  const WIDGET_VERSION = '1.3.46'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -406,7 +406,15 @@
   }
 
   const lastBookedActualDate = (data, dateDim, versionDim, actualToken) => {
-    let best = null
+    // Collect every distinct real period with a genuine booked value first,
+    // rather than just tracking a running max. Planning data occasionally
+    // carries an isolated real value far in the future on the Look Back
+    // version (e.g. an opening balance dated to a later fiscal year start)
+    // even though the true monthly actuals stop earlier with a gap in
+    // between. Treating that isolated value as "the last booked period"
+    // would push the whole Forecast cut-over a full year ahead of where the
+    // real, continuously-booked data actually ends.
+    const seen = new Map()
     ;(data || []).forEach(row => {
       if (versionDim) {
         const cell = rowCell(row, versionDim)
@@ -430,11 +438,29 @@
         return
       }
       const date = memberDate(dateCell)
-      if (date && (!best || date.getTime() > best.getTime())) {
-        best = date
+      if (!date) {
+        return
+      }
+      const key = fiscalYearOf(date) * 100 + fiscalPeriodOf(date)
+      if (!seen.has(key) || date.getTime() > seen.get(key).getTime()) {
+        seen.set(key, date)
       }
     })
-    return best
+    if (!seen.size) {
+      return null
+    }
+    const orderedKeys = Array.from(seen.keys()).sort((a, b) => a - b)
+    let contiguousEnd = orderedKeys[0]
+    for (let i = 1; i < orderedKeys.length; i++) {
+      const prevYear = Math.floor(contiguousEnd / 100)
+      const prevPeriod = contiguousEnd % 100
+      const nextExpected = prevPeriod === 12 ? (prevYear + 1) * 100 + 1 : prevYear * 100 + prevPeriod + 1
+      if (orderedKeys[i] !== nextExpected) {
+        break
+      }
+      contiguousEnd = orderedKeys[i]
+    }
+    return seen.get(contiguousEnd)
   }
 
   const resolveCutOver = (setting, options) => {

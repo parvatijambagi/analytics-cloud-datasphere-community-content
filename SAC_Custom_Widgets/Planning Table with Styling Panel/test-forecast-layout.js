@@ -37,11 +37,16 @@ if (specific.getFullYear() !== 2025 || specific.getMonth() !== 2) {
 
 const dateDim = { key: 'date' }
 const versionDim = { key: 'version' }
-const data = [
-  { date: { id: 'P01 (2026)', label: 'P01 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: 100 } },
-  { date: { id: 'P11 (2026)', label: 'P11 (2026)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: 200 } },
+const contiguousMonths = (fy, throughPeriod) => {
+  const rows = []
+  for (let p = 1; p <= throughPeriod; p++) {
+    rows.push({ date: { id: 'P' + String(p).padStart(2, '0') + ' (' + fy + ')', label: 'P' + String(p).padStart(2, '0') + ' (' + fy + ')' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: p * 100 } })
+  }
+  return rows
+}
+const data = contiguousMonths(2026, 11).concat([
   { date: { id: 'P12 (2026)', label: 'P12 (2026)' }, version: { id: 'FC', label: 'FC' }, LC: { raw: 300 } }
-]
+])
 const last = api.lastBookedActualDate(data, dateDim, versionDim, 'Actual')
 if (!last || last.getFullYear() !== 2026 || last.getMonth() !== 7) {
   throw new Error('Last booked actual should be P11 Aug 2026, got ' + (last && last.toISOString()))
@@ -59,6 +64,20 @@ const unbookedTailRows = [
 const lastWithUnbookedTail = api.lastBookedActualDate(unbookedTailRows, dateDim, versionDim, 'Actual')
 if (!lastWithUnbookedTail || lastWithUnbookedTail.getFullYear() !== 2026 || lastWithUnbookedTail.getMonth() !== 6) {
   throw new Error('P11/P12 rows with no real measure value must not count as booked; last booked should stay P10 Jul 2026, got ' + (lastWithUnbookedTail && lastWithUnbookedTail.toISOString()))
+}
+
+// Reported scenario: P01-P10 (2026) are genuinely, contiguously booked, but
+// an isolated real value also exists on the very first day of the NEXT
+// fiscal year (an opening-balance-style entry dated Oct 1, 2026 / P01 2027)
+// with a gap in between (P11/P12 2026 have no value). The isolated future
+// value must not be picked as "last booked" -- the true booked run stops at
+// P10 2026, so that is what the cut-over must use.
+const isolatedFutureRow = contiguousMonths(2026, 10).concat([
+  { date: { id: 'P01 (2027)', label: 'P01 (2027)' }, version: { id: 'Actual', label: 'Actual' }, LC: { raw: 999 } }
+])
+const lastWithIsolatedFuture = api.lastBookedActualDate(isolatedFutureRow, dateDim, versionDim, 'Actual')
+if (!lastWithIsolatedFuture || api.fiscalYearOf(lastWithIsolatedFuture) !== 2026 || api.fiscalPeriodOf(lastWithIsolatedFuture) !== 10) {
+  throw new Error('An isolated future value across a gap must not be treated as last booked; should stay P10 (2026), got ' + (lastWithIsolatedFuture && (api.fiscalYearOf(lastWithIsolatedFuture) + ' P' + api.fiscalPeriodOf(lastWithIsolatedFuture))))
 }
 
 const fyMembers = [
