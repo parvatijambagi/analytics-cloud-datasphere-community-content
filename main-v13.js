@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.41'
+  const WIDGET_VERSION = '1.3.42'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1681,7 +1681,15 @@
           { versionId: lookAheadId, lookAhead: true }
         ]
         extraVersions.forEach(id => {
-          if (id && id !== lookBackId && id !== lookAheadId) {
+          // Compare with versionMatches(), not exact string equality: the
+          // resolved lookBackId/lookAheadId are often prefixed technical IDs
+          // (e.g. "public.FC") while Additional Versions stores the bare
+          // token (e.g. "FC"). An exact-string check treated those as two
+          // different versions and duplicated the same FC column into its
+          // own extra group, which is why Actual/FC kept appearing side by
+          // side for every date instead of only at the look-back/look-ahead
+          // split.
+          if (id && !versionMatches({ id: id }, lookBackId) && !versionMatches({ id: id }, lookAheadId)) {
             versionGroups.push({ versionId: id, lookAhead: null })
           }
         })
