@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.48'
+  const WIDGET_VERSION = '1.3.49'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1751,8 +1751,12 @@
               (versionMatches(vCell, lookBackId) ? '(matches LB)' : '(no LB match)') +
               ', hasValue=' + hasValue + ']'
           }).join(' ')
+          const activeFilters = Object.keys(this._dimFilters || {}).filter(key => this._dimFilters[key])
+            .map(key => key + '=' + this._dimFilters[key]).join(', ')
           rawSampleText = ' | dateDim=' + (dateDim.key || dateDim.id) + ' versionDim=' + (versionDim.key || versionDim.id) +
-            ' rows=' + view.length + ' sample: ' + (sample || '(view is empty)')
+            ' rawDataRows=' + (data ? data.length : 0) + ' rows(afterDimFilters)=' + view.length +
+            ' activeDimFilters=[' + (activeFilters || 'none') + ']' +
+            ' sample: ' + (sample || '(view is empty)')
         }
         this._lastCutoverInfo = {
           cutoverText: cutover instanceof Date && !Number.isNaN(cutover.getTime())
