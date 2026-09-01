@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.47'
+  const WIDGET_VERSION = '1.3.48'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -1723,6 +1723,37 @@
           })
           bookedActualPeriods.sort((a, b) => a.date.getTime() - b.date.getTime())
         }
+        // When 0 booked periods are found, show exactly what the widget sees
+        // for the first few raw rows of the bound data -- the literal Date
+        // and Version cell id/label, whether that Date cell is treated as
+        // an aggregate ((all)/Year/Quarter with no drill), and whether it
+        // has a real measure value. This turns "no data" into concrete
+        // evidence: a token mismatch (e.g. lookBackId not matching the real
+        // Version member) looks completely different from every row's Date
+        // cell being aggregate, which looks different again from every row
+        // genuinely having empty measure cells.
+        let rawSampleText = ''
+        if (dateDim && versionDim && !bookedActualPeriods.length) {
+          const sample = view.slice(0, 5).map(item => {
+            const dCell = rowCell(item, dateDim)
+            const vCell = rowCell(item, versionDim)
+            const hasValue = Object.keys(item || {}).some(key => {
+              const cell = item[key]
+              if (!cell || typeof cell !== 'object' || cell.raw == null || cell.raw === '') {
+                return false
+              }
+              const numeric = typeof cell.raw === 'number' ? cell.raw : Number(String(cell.raw).replace(/,/g, ''))
+              return !Number.isNaN(numeric)
+            })
+            return '[date=' + (dCell.id || dCell.label || '?') +
+              (isAggregateDateMember(dCell) ? '(agg)' : '') +
+              ', version=' + (vCell.id || vCell.label || '?') +
+              (versionMatches(vCell, lookBackId) ? '(matches LB)' : '(no LB match)') +
+              ', hasValue=' + hasValue + ']'
+          }).join(' ')
+          rawSampleText = ' | dateDim=' + (dateDim.key || dateDim.id) + ' versionDim=' + (versionDim.key || versionDim.id) +
+            ' rows=' + view.length + ' sample: ' + (sample || '(view is empty)')
+        }
         this._lastCutoverInfo = {
           cutoverText: cutover instanceof Date && !Number.isNaN(cutover.getTime())
             ? (cutover.toDateString() + ' (FY' + fiscalYearOf(cutover) + ' P' + String(fiscalPeriodOf(cutover)).padStart(2, '0') + ')')
@@ -1730,9 +1761,9 @@
           fromCache: !!(/last booked/i.test(String(cutMode)) && cachedBooked),
           lookBackId,
           lookAheadId,
-          bookedPeriodsText: bookedActualPeriods.length
+          bookedPeriodsText: (bookedActualPeriods.length
             ? (bookedActualPeriods.length + ' booked period(s) found: ' + bookedActualPeriods.map(p => 'P' + String(fiscalPeriodOf(p.date)).padStart(2, '0') + ' (FY' + fiscalYearOf(p.date) + ')').join(', '))
-            : '0 booked periods found for Look Back version ' + lookBackId
+            : '0 booked periods found for Look Back version ' + lookBackId) + rawSampleText
         }
         this._forecastQuery = {
           dateDim,
