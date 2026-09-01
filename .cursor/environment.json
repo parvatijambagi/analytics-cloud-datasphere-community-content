@@ -1,0 +1,17 @@
+{
+  "name": "Analytics Cloud & Datasphere Community Content",
+  "install": "cd 'SAC_Custom_Widgets/file-upload-widget-master' && npm ci",
+  "terminals": [
+    {
+      "name": "File Upload Widget dev server",
+      "command": "cd 'SAC_Custom_Widgets/file-upload-widget-master' && npm run dev -- --host",
+      "description": "Vite dev server for the SAC File Upload custom widget. Serves the widget dev harness at http://localhost:5173 . The Planning Table custom-widget node checks run without any install: node 'SAC_Custom_Widgets/Planning Table with Styling Panel/test-column-layout.js' and test-forecast-layout.js ."
+    }
+  ],
+  "ports": [
+    {
+      "name": "File Upload Widget dev server",
+      "port": 5173
+    }
+  ]
+}
