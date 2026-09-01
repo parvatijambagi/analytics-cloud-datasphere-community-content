@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '1.3.49'
+  const WIDGET_VERSION = '1.3.50'
   const parseMetadata = metadata => {
     const dimensionsMap = (metadata && metadata.dimensions) || {}
     const measuresMap = (metadata && (metadata.mainStructureMembers || metadata.measures || metadata.accounts)) || {}
@@ -230,6 +230,27 @@
     const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/)
     if (iso) {
       return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+    }
+    // SAP fiscal-native member ids (e.g. from a hierarchy built on a
+    // FISCAL_CALPERIOD/FISCAL_CALQUARTER/FISCAL_CALYEAR attribute, such as
+    // "[Date.FISCAL_CALPERIOD].[202501]") encode SAP's own fiscal year --
+    // named by the year the fiscal year STARTS -- followed by the
+    // period/quarter number. That is NOT a calendar year+month even though
+    // the digits look like one (e.g. "202501" here means SAP FY2025 P01 =
+    // Oct 2025, not January 2025). Decode these directly using our
+    // end-year fiscal convention (SAP start-year + 1) before any of the
+    // generic calendar-code guesses below get a chance to misread them.
+    const fiscalPeriodCode = text.match(/FISCAL[_.]?CAL\s*PERIOD[^\d]*(20\d{2}|19\d{2})\s*(0[1-9]|1[0-2])\b/i)
+    if (fiscalPeriodCode) {
+      return fiscalPeriodStart(Number(fiscalPeriodCode[1]) + 1, Number(fiscalPeriodCode[2]))
+    }
+    const fiscalQuarterCode = text.match(/FISCAL[_.]?CAL\s*QUARTER[^\d]*(20\d{2}|19\d{2})\s*([1-4])\b/i)
+    if (fiscalQuarterCode) {
+      return fiscalPeriodStart(Number(fiscalQuarterCode[1]) + 1, (Number(fiscalQuarterCode[2]) - 1) * 3 + 1)
+    }
+    const fiscalYearCode = text.match(/FISCAL[_.]?CAL\s*YEAR[^\d]*(20\d{2}|19\d{2})\b/i)
+    if (fiscalYearCode) {
+      return fiscalPeriodStart(Number(fiscalYearCode[1]) + 1, 1)
     }
     const fyThenP = text.match(/fiscalyear[^\d]*(20\d{2}|19\d{2})[\s\S]{0,160}?fiscalperiod[^\d]*0*(0?[1-9]|1[0-2])/i)
     if (fyThenP) {
@@ -1723,18 +1744,23 @@
           })
           bookedActualPeriods.sort((a, b) => a.date.getTime() - b.date.getTime())
         }
-        // When 0 booked periods are found, show exactly what the widget sees
-        // for the first few raw rows of the bound data -- the literal Date
-        // and Version cell id/label, whether that Date cell is treated as
-        // an aggregate ((all)/Year/Quarter with no drill), and whether it
-        // has a real measure value. This turns "no data" into concrete
-        // evidence: a token mismatch (e.g. lookBackId not matching the real
-        // Version member) looks completely different from every row's Date
-        // cell being aggregate, which looks different again from every row
-        // genuinely having empty measure cells.
+        // Always show exactly what the widget sees for a handful of raw,
+        // non-aggregate Look-Back-version rows -- the literal Date cell id,
+        // the date/fiscal-year/fiscal-period our own parser derived from
+        // that id, and whether it has a real measure value. Comparing the
+        // raw id against our parsed FY/period is the only way to catch a
+        // date-parsing bug (e.g. the model's period code not meaning what
+        // parseLooseDate assumes it means) instead of a missing-data issue,
+        // since a parsing bug still reports "N booked periods found" -- just
+        // with the wrong FY/period labels attached to them.
         let rawSampleText = ''
-        if (dateDim && versionDim && !bookedActualPeriods.length) {
-          const sample = view.slice(0, 5).map(item => {
+        if (dateDim && versionDim) {
+          const nonAggRows = view.filter(item => {
+            const dCell = rowCell(item, dateDim)
+            const vCell = rowCell(item, versionDim)
+            return !isAggregateDateMember(dCell) && versionMatches(vCell, lookBackId)
+          })
+          const sample = (nonAggRows.length ? nonAggRows : view).slice(0, 6).map(item => {
             const dCell = rowCell(item, dateDim)
             const vCell = rowCell(item, versionDim)
             const hasValue = Object.keys(item || {}).some(key => {
@@ -1745,8 +1771,13 @@
               const numeric = typeof cell.raw === 'number' ? cell.raw : Number(String(cell.raw).replace(/,/g, ''))
               return !Number.isNaN(numeric)
             })
-            return '[date=' + (dCell.id || dCell.label || '?') +
+            const parsedDate = memberDate(dCell)
+            const parsedText = parsedDate
+              ? (parsedDate.toDateString() + ' => FY' + fiscalYearOf(parsedDate) + ' P' + String(fiscalPeriodOf(parsedDate)).padStart(2, '0'))
+              : 'unparseable'
+            return '[rawId=' + (dCell.id || '?') + ', rawLabel=' + (dCell.label || '?') +
               (isAggregateDateMember(dCell) ? '(agg)' : '') +
+              ', parsed=' + parsedText +
               ', version=' + (vCell.id || vCell.label || '?') +
               (versionMatches(vCell, lookBackId) ? '(matches LB)' : '(no LB match)') +
               ', hasValue=' + hasValue + ']'
