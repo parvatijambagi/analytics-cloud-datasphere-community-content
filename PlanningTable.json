@@ -1,0 +1,409 @@
+{
+  "eula": "",
+  "vendor": "SAP",
+  "license": "",
+  "id": "com.sap.sac.sample.planning.table.v13",
+  "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
+  "version": "1.3.50",
+  "supportsMobile": true,
+  "supportsBookmark": true,
+  "name": "Planning Table 1.3",
+  "newInstancePrefix": "PlanningTable13",
+  "description": "A sample custom planning table with editable measure cells, change highlighting, and events for story-script write-back",
+  "webcomponents": [
+    {
+      "kind": "main",
+      "tag": "com-sap-sac-sample-planning-table-v13",
+      "url": "/main-v13.js",
+      "integrity": "sha256-nrBBj0y9HrVrMrTQ0jhyLE0JSS/hYScKOj8qIlfE4Kw=",
+      "ignoreIntegrity": true
+    },
+    {
+      "kind": "styling",
+      "tag": "com-sap-sac-sample-planning-table-styling-v13",
+      "url": "/styling-v13.js",
+      "integrity": "sha256-NIgpWYqUHKi9u0sBqEyDUvUyC3TAp4HkNWKoTBWevP0=",
+      "ignoreIntegrity": true
+    }
+  ],
+  "properties": {
+    "width": {
+      "type": "integer",
+      "default": 720
+    },
+    "height": {
+      "type": "integer",
+      "default": 420
+    },
+    "headerBackground": {
+      "type": "string",
+      "default": "#0854A0",
+      "description": "Table header background color"
+    },
+    "headerTextColor": {
+      "type": "string",
+      "default": "#FFFFFF",
+      "description": "Table header text color"
+    },
+    "changedCellColor": {
+      "type": "string",
+      "default": "#FFF3B8",
+      "description": "Background color for edited planning cells"
+    },
+    "fontSize": {
+      "type": "integer",
+      "default": 14,
+      "description": "Table font size in pixels"
+    },
+    "fontFamily": {
+      "type": "string",
+      "default": "Arial",
+      "description": "Table font family"
+    },
+    "fontColor": {
+      "type": "string",
+      "default": "#32363A",
+      "description": "Table font color"
+    },
+    "fontStyle": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default, Bold, or Italic"
+    },
+    "underline": {
+      "type": "boolean",
+      "default": false,
+      "description": "Underline text"
+    },
+    "strikethrough": {
+      "type": "boolean",
+      "default": false,
+      "description": "Strikethrough text"
+    },
+    "hAlign": {
+      "type": "string",
+      "default": "left",
+      "description": "Horizontal alignment for dimension cells"
+    },
+    "vAlign": {
+      "type": "string",
+      "default": "middle",
+      "description": "Vertical alignment"
+    },
+    "lineType": {
+      "type": "string",
+      "default": "Simple Line",
+      "description": "Cell border type"
+    },
+    "lineWidth": {
+      "type": "integer",
+      "default": 1,
+      "description": "Cell border weight"
+    },
+    "lineColor": {
+      "type": "string",
+      "default": "#d9d9d9",
+      "description": "Cell border color"
+    },
+    "lineStyle": {
+      "type": "string",
+      "default": "Solid",
+      "description": "Solid, Dashed, or Dotted"
+    },
+    "leftPadding": {
+      "type": "integer",
+      "default": 4,
+      "description": "Left cell padding in pixels"
+    },
+    "rightPadding": {
+      "type": "integer",
+      "default": 4,
+      "description": "Right cell padding in pixels"
+    },
+    "numberMeasureSelection": {
+      "type": "string",
+      "default": "All",
+      "description": "Which measures receive number format"
+    },
+    "numberScale": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default, Thousand, Million, Billion, or Percent"
+    },
+    "numberScaleFormat": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default or Suffix"
+    },
+    "numberDecimalPlaces": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default or 0-4"
+    },
+    "showSignAs": {
+      "type": "string",
+      "default": "Default",
+      "description": "Default, Minus, Parentheses, or PlusMinus"
+    },
+    "stylingRulesJson": {
+      "type": "string",
+      "default": "[{\"name\":\"Editable IHBs\",\"target\":\"editable\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Read-only Accounts IHB\",\"target\":\"readonly-account\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Read-only IHB\",\"target\":\"readonly\",\"background\":\"\",\"color\":\"\"},{\"name\":\"ReadOnlyInternalAccounts\",\"target\":\"readonly-account\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Editable\",\"target\":\"editable\",\"background\":\"\",\"color\":\"\"},{\"name\":\"Read-only\",\"target\":\"readonly\",\"background\":\"\",\"color\":\"\"}]",
+      "description": "JSON list of styling rules; top rule overrules those below"
+    },
+    "decimalPlaces": {
+      "type": "integer",
+      "default": 2,
+      "description": "Decimal places shown in editable cells"
+    },
+    "showTotals": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show a totals row for measures"
+    },
+    "readOnly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Disable cell editing"
+    },
+    "showToolbar": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show Submit and Revert actions"
+    },
+    "columnDimension": {
+      "type": "string",
+      "default": "Auto",
+      "description": "Auto shows Date, Version, and GL-Accounts from Columns as stacked header rows under Measures. None keeps extra dimensions on data rows unless they are in the Columns well."
+    },
+    "tableType": {
+      "type": "string",
+      "default": "Cross-Tab",
+      "description": "Cross-Tab or Forecast Layout"
+    },
+    "lookBackOn": {
+      "type": "string",
+      "default": "Actual",
+      "description": "Version used before the cut-over date"
+    },
+    "lookAheadOn": {
+      "type": "string",
+      "default": "EPMplusA",
+      "description": "Version used on and after the cut-over date"
+    },
+    "cutOverDate": {
+      "type": "string",
+      "default": "Today",
+      "description": "Forecast cut-over date or selected Date dimension member"
+    },
+    "cutOverMode": {
+      "type": "string",
+      "default": "Today",
+      "description": "Today, SpecificDate, or LastBooked"
+    },
+    "timeframeType": {
+      "type": "string",
+      "default": "Forecast",
+      "description": "Forecast timeframe type"
+    },
+    "timeframeGranularity": {
+      "type": "string",
+      "default": "Month",
+      "description": "Forecast granularity"
+    },
+    "timeframeRange": {
+      "type": "string",
+      "default": "Year",
+      "description": "Forecast range"
+    },
+    "lookBackAdditional": {
+      "type": "integer",
+      "default": 0,
+      "description": "Extra look-back periods"
+    },
+    "lookBackAdditionalUnit": {
+      "type": "string",
+      "default": "Year",
+      "description": "Look-back additional unit"
+    },
+    "lookAheadAdditional": {
+      "type": "integer",
+      "default": 0,
+      "description": "Extra look-ahead periods"
+    },
+    "lookAheadAdditionalUnit": {
+      "type": "string",
+      "default": "Year",
+      "description": "Look-ahead additional unit"
+    },
+    "sumFor": {
+      "type": "string",
+      "default": "Cut-Over Year",
+      "description": "Forecast calculation sum-for"
+    },
+    "additionalVersionsJson": {
+      "type": "string",
+      "default": "[]",
+      "description": "JSON list of additional forecast versions: [{ version, deltaBasedOn }]"
+    },
+    "swapAxes": {
+      "type": "boolean",
+      "default": false,
+      "description": "Swap Rows and Columns"
+    }
+  },
+  "methods": {
+    "getDataSource": {
+      "description": "Return the data source of the planning table data binding",
+      "parameters": [],
+      "body": "return this.dataBindings.getDataBinding('dataBinding').getDataSource();",
+      "returnType": "DataSource"
+    },
+    "getDimensions": {
+      "description": "Return model dimensions",
+      "parameters": [],
+      "body": "return this.dataBindings.getDataBinding('dataBinding').getDataSource().getDimensions();",
+      "returnType": "DimensionInfo[]"
+    },
+    "getMeasures": {
+      "description": "Return model measures or accounts",
+      "parameters": [],
+      "body": "return this.dataBindings.getDataBinding('dataBinding').getDataSource().getMeasures();",
+      "returnType": "MeasureInfo[]"
+    },
+    "addDimension": {
+      "description": "Add a dimension to the Rows feed",
+      "parameters": [
+        {
+          "name": "dimensionId",
+          "type": "string",
+          "description": "Dimension ID"
+        }
+      ],
+      "body": "this.dataBindings.getDataBinding('dataBinding').addDimensionToFeed('dimensions', dimensionId);"
+    },
+    "addColumnDimension": {
+      "description": "Add a dimension to the Columns feed",
+      "parameters": [
+        {
+          "name": "dimensionId",
+          "type": "string",
+          "description": "Dimension ID"
+        }
+      ],
+      "body": "this.dataBindings.getDataBinding('dataBinding').addDimensionToFeed('dimensions2', dimensionId);"
+    },
+    "addMeasure": {
+      "description": "Add a measure or account to the Measures feed",
+      "parameters": [
+        {
+          "name": "measureId",
+          "type": "string",
+          "description": "Measure or account ID"
+        }
+      ],
+      "body": "this.dataBindings.getDataBinding('dataBinding').addMemberToFeed('measures', measureId);"
+    },
+    "getLastChange": {
+      "description": "Get the last edited cell, including selection keys for setUserInput",
+      "returnType": "PlanningChange"
+    },
+    "getPendingChanges": {
+      "description": "Get all unpublished cell edits as a JSON string",
+      "returnType": "string"
+    },
+    "getPendingChangeCount": {
+      "description": "Get the number of unpublished cell edits",
+      "returnType": "integer"
+    },
+    "submitChanges": {
+      "description": "Raise onSubmit so story script can call setUserInput and submitData"
+    },
+    "revertChanges": {
+      "description": "Discard unpublished cell edits and raise onRevert"
+    },
+    "setReadOnly": {
+      "description": "Enable or disable cell editing",
+      "parameters": [
+        {
+          "name": "value",
+          "type": "boolean",
+          "description": "true to lock the table"
+        }
+      ]
+    }
+  },
+  "events": {
+    "onCellChange": {
+      "description": "Dispatch when a planner edits a measure cell"
+    },
+    "onSubmit": {
+      "description": "Dispatch when Submit is used; write back from story script"
+    },
+    "onRevert": {
+      "description": "Dispatch when unpublished edits are discarded"
+    }
+  },
+  "types": {
+    "PlanningChange": {
+      "description": "One planning cell edit",
+      "properties": [
+        {
+          "name": "measureId",
+          "type": "string",
+          "description": "Measure or account ID for the selection"
+        },
+        {
+          "name": "measureDescription",
+          "type": "string",
+          "description": "Measure or account description"
+        },
+        {
+          "name": "oldValue",
+          "type": "string",
+          "description": "Original bound value"
+        },
+        {
+          "name": "newValue",
+          "type": "string",
+          "description": "Edited value to pass to setUserInput"
+        },
+        {
+          "name": "selectionJson",
+          "type": "string",
+          "description": "JSON selection object for Table.getPlanning().setUserInput"
+        },
+        {
+          "name": "dimensionMemberIds",
+          "type": "string",
+          "description": "Semicolon-separated dimensionId=memberId pairs"
+        },
+        {
+          "name": "dimensionLabels",
+          "type": "string",
+          "description": "Readable dimension member labels"
+        }
+      ]
+    }
+  },
+  "dataBindings": {
+    "dataBinding": {
+      "feeds": [
+        {
+          "id": "dimensions",
+          "description": "Rows",
+          "type": "dimension"
+        },
+        {
+          "id": "dimensions2",
+          "description": "Columns",
+          "type": "dimension"
+        },
+        {
+          "id": "measures",
+          "description": "Measures",
+          "type": "mainStructureMember"
+        }
+      ]
+    }
+  }
+}
