@@ -4,7 +4,7 @@
   "license": "",
   "id": "com.sap.sac.sample.planning.table.v13",
   "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkElEQVR42u3YwQ2AIAwF0B4d0EEcyTGcSwbQBTyBSQN9P+mxlxdIPsRTPAEAAAAAAAAAAAAAAIDPbPs59fwCEMfdPZn7AAAAAAAAAAAAmuAowEgy9wEAAAAAAAAAADTB9BPQru5Z4woAAAAAAAAAAKYF0AQ9hgAAAAAAAAAA/gQLNsHVAwAAAAAAAAAAAKBqXujuGl7YthsUAAAAAElFTkSuQmCC",
-  "version": "1.3.46",
+  "version": "1.3.47",
   "supportsMobile": true,
   "supportsBookmark": true,
   "name": "Planning Table 1.3",
@@ -15,7 +15,7 @@
       "kind": "main",
       "tag": "com-sap-sac-sample-planning-table-v13",
       "url": "/main-v13.js",
-      "integrity": "sha256-4GnKrliRiLldmHQ7kOukcWnfNnv9vM8OTIlLvZQ0xSg=",
+      "integrity": "sha256-6SFegfj5jD6wVadC+HYtevdG/YtwowT2OICzU2qGGe8=",
       "ignoreIntegrity": true
     },
     {
